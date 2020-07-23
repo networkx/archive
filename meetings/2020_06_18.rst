@@ -1,0 +1,122 @@
+June 18, 2020
+=============
+
+**Attendees:**
+Ross Barnowski,
+Aric Hagberg,
+Jarrod Millman,
+Dan Schult,
+Stéfan van der Walt
+
+.. contents::
+   :depth: 3
+
+Begin (5 min)
+-------------
+
+- meet weekly (same time?)
+- introductions
+
+Report (10 min)
+---------------
+
+releases (jarrod, dan)
+~~~~~~~~~~~~~~~~~~~~~~
+
+- 2.5 (9/2020)
+
+   -  support 3.6–3.9
+   -  finalize(soft) new API / deprecation
+
+- 3.0 (1/2021)
+- 3.1 (7/2021)
+
+triage issues/PRs (dan, ross)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  Go through and categorize
+-  Delete easy stuff
+-  Help for planning issues to fix
+-  Bring S and J in for discussion / organization
+-  Identify common problems / requests
+
+dev/governance guide (jarrod, dan, stefan)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- new feature criteria, contributing, scope, values, governance
+
+links
+
+-  https://scipy.github.io/devdocs/dev/core-dev/index.html#deciding-on-new-features
+-  https://scikit-image.org/docs/stable/core_developer.html
+-  https://scikit-image.org/docs/dev/values.html
+-  https://scikit-learn.org/stable/governance.html
+-  https://scikit-learn.org/stable/developers/contributing.html
+-  https://scikit-learn.org/stable/faq.html#new-algorithms-inclusion-criteria
+
+benchmarking (ross, jarrod)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  https://www.timlrx.com/2020/05/10/benchmark-of-popular-graph-network-packages-v2/
+-  https://github.com/airspeed-velocity/asv
+
+search engine optimization (jarrod, stefan)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  https://github.com/networkx/networkx/issues/2730
+-  https://docs.ansible.com/ansible/2.5/plugins/lookup/items.html
+-  https://github.com/ansible/ansible/blob/devel/docs/docsite/_themes/sphinx_rtd_theme/ansible_banner.html
+
+paper (jarrod, stefan, dan)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- venue / focus
+
+numpydoc (ross, jarrod, stefan)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  Better troubleshooting/feedback
+-  Clean-up our docstrings
+-  Test docstrings ... type hinting / annotation
+-  dollar math, etc
+
+Discuss (45 min)
+----------------
+
+BIG CHANGES
+~~~~~~~~~~~
+
+-  numpy matrix
+
+::
+
+       warnings.filterwarnings(
+           "ignore",
+           category=PendingDeprecationWarning,
+           message="the matrix subclass is not the recommended way*",
+       )
+
+-  SciPy/NumPy hard/soft dependencies
+-  scikit-image and SciPy.sparse.csgraph
+-  sparse / pysparse
+-  Cython and/or Numba
+-  parallelization infrastructure
+-  visualization
+-  fix hard dependencies (gdal)
+-  code audit and refactor
+-  graph protocol?
+-  other API issues?
+
+next steps
+~~~~~~~~~~
+
+- regular meetings
+
+  - what type(s): weekly community, ....
+  - how often:
+  - who to invite: 
+  - when to start: 
+
+- important applications
+- outreach
+- sprints
