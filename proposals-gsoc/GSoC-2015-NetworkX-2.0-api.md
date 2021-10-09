@@ -1,8 +1,8 @@
-###Sub-organization information
+### Sub-organization information
 
 Sub-organization with whom you hope to work(*): NetworkX
 
-###Student Information
+### Student Information
 
 **Name(*)**: Mridul Seth <br/>
 **Email(*)**: seth.mridul@gmail.com <br/>
@@ -14,24 +14,24 @@ Sub-organization with whom you hope to work(*): NetworkX
 **Blog(s)(*)**: http://mseth.me<br/>
 **GSoC Blog RSS feed(*)**: http://mseth.me/feed.xml<br/>
 
-###University Information
+### University Information
 
 **University(*)**: BITS Pilani, KK Birla Goa Campus, India <br/>
 **Major(*)**: Mathematics and Electronics Engineering <br/>
 **Current Year and Expected Graduation date(*)**: 2nd Year, May 2018 <br/>
 **Degree(*) (e.g. BSc, PhD)**:  Dual Degree MSc. (Hons) Mathemetics and B.Engineering (Hons) Electronics Engineering <br/>
 
-###Project Proposal Information
+### Project Proposal Information
 
-####Proposal Title (*)
+#### Proposal Title (*)
 
 **NetworkX: NetworkX 2.0 and API**
 
-####Proposal Abstract (*)
+#### Proposal Abstract (*)
 
 The first part of this project deals with cleaning up the the existing graph API. The functions returning both lists and iterators will be changed to return iterators and thus the _iter suffix will be retired. This will be followed by a cleanup and reorganising the existing codebase as required and decided, and getting it ready for the 2.0 release. The next part will be to design and implement a new unified graph API. 
 
-####Description
+#### Description
  
 As NetworkX moves towards NetworkX 2.0 and an iterator/generator reporting model, implementing a better, less redundant API is a must for NetworkX. The central idea of this project (proposal) is to offer to first update the existing graph API, clean up and review the existing code, and update the documentation as required and prepare it for 2.0 release. The second part is design and implement a new generic and unified(?) graph API with a clean design.
 
@@ -75,18 +75,18 @@ Although the second part is a lot of work and might be difficult to implement in
 Note: (?) -> to be discussed further with the NetworkX community
  
 
-####Timeline
+#### Timeline
 
 A rough timeline:
  
-#####April 27 - May 25 (Pre GSoC Period-Community Bonding Period)
+##### April 27 - May 25 (Pre GSoC Period-Community Bonding Period)
 
 * Working on issues and pending PRs in [2.0](https://github.com/networkx/networkx/milestones/networkx-2.0)
 * Working on issues like [1120](https://github.com/networkx/networkx/issues/1120), [#793](https://github.com/networkx/networkx/issues/793), [#730](https://github.com/networkx/networkx/issues/730)
 * Discussion about the API Design specification
 * Getting more familiar with the core code and graph classes.
  
-#####May 25 - July 6
+##### May 25 - July 6
  
 * Working on renaming _iter functions.
 * Updating the documentation and tests as necessary.
@@ -97,17 +97,17 @@ A rough timeline:
 * Some more work on [2.0](https://github.com/networkx/networkx/milestones/networkx-2.0) (?)
 * Making sure that the code is good enough to be merged in the master repo and ready for 2.0 release
  
-#####July 7 - August 21
+##### July 7 - August 21
 
 * Working on the implementation of the new API design.
 * Cleaning and reorganising the current codebase as required and decided.
 * Final wrap up report detailing the changes in 2.0, and progress on the implementation of new API.
  
-#####August 21 - (Post GSoC)
+##### August 21 - (Post GSoC)
 
 * Continue working on the new API design and get it ready for the next major version release. :)
  
-####Link to a patch/code sample, preferably one you have submitted to your sub-org (*)
+#### Link to a patch/code sample, preferably one you have submitted to your sub-org (*)
 
 * Expose transitive_clousure and antichains in the public API (https://github.com/networkx/networkx/pull/1413) [MERGED]
 * Added dijkstra version with node weights (https://github.com/networkx/networkx/pull/1350 ) [OPEN]
@@ -116,7 +116,7 @@ A rough timeline:
 * Added data keyword in G.neighbors (https://github.com/networkx/networkx/pull/1344 ) [CLOSED]
 
 
-###Other Schedule Information
+### Other Schedule Information
 
 * Please indicate any vacations or other time off that you may be taking or expecting to take over the course of the summer. Any time that you would not be expecting to work should be noted here, along with a reason. (e.g. "June 12-15th, travel for my sister's wedding" "May 30, midterm exam") Google expects you to work 40h/week for the entire GSoC period, so consider how you will make up any lost time (you may have to start coding during community bonding, for example).
 
@@ -126,7 +126,7 @@ A rough timeline:
 
  * Yes, I am also applying to GNS3, another sub org in PSF. I would love to work with both the organisations but I would prefer to work with NetworkX as I have been using/ working with them for a longer time. 
 
-###Sub-organization specific information
+### Sub-organization specific information
 
 #### Background
 
