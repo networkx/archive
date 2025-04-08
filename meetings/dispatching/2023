@@ -1,0 +1,481 @@
+# NetworkX Dispatch Meeting notes
+Meeting link:   https://anaconda.zoom.us/j/94192874965?pwd=K0wvcmhXem41ZlVSQ2l4TXlUaDgxdz09
+hackmd link:   https://hackmd.io/rqs_pWMxSLmICXCpI3w-Ug
+Archived notes: https://github.com/networkx/archive/tree/main/meetings/dispatching
+
+
+## April 6th 2023
+
+
+- [name=MridulS] Working on types annotations in networkx, we still need to think about how would downstream users be able to access keyword type annotations.-  https://scientific-python.org/specs/spec-0002/
+
+
+- Adding a dispatched graph algorithm just as an API (no networkx implementation). We need to try this out. Raise notimplemented error by default.
+
+
+- [name=MridulS] Try out `networkx[fast]` as a new distribution for projects like osmnx which can get fast.
+
+
+- We need to look at the exceptions raised from outside networkx (like scipy) and formalise them for NetworkX API too.
+
+
+
+## July 27th 2023
+
+- Return types for backends - do we standardize on Nx types or allow backends to return various native types?
+  - Seems like standardizing on Nx types will best allow for drop-in compatibility, which is desirable
+  - This also ties in to the general graph API topic
+
+- Exceptions
+  - Do backends convert to a standard set of Nx exceptions?
+
+- Test suite
+  - should backends be required to pass Nx tests?
+
+- Nx parallel
+  - should parallel compute be part of Nx proper or stay in Nx parallel?
+
+- Usage stats
+  - opt-in mechanism proposed
+    - when user enables it and runs their application, a plain text human readable file is generated with the API calls used
+    - user can then email it after inspecting that they're okay sharing it.
+
+- Other
+  - how to expose configuration for various backends
+  - Erik: what are our next deliverables?
+
+- Graph types for different backends:
+  - option 1: each backend provides a compatible graph object that the Nx user interacts with
+    - this is what we're choosing for now
+  - option 2: have backends extend the Nx graph types
+  - option 3: support both?
+
+- Design document: https://github.com/python-graphblas/graphblas-algorithms/wiki/NetworkX-Dispatching-Design-Document
+
+- cugraph-nx initial algos:
+  - Louvain
+  - Betweenness Centrality (both edge and vertex)
+
+- Action items:
+  - Rick to confirm for Mridul RAPIDS/cugraph runs in Google colab
+
+- Roadmap
+  - We have a mid-September deadline for a presentation recording for Nvidia Data Science Summit
+  - Mridul is only available until the end of the year
+  - Tentative roadmap:
+    - Nx PR (update: merged, will be in Nx 3.2)
+    - cugraph-nx PR
+    - Nvidia Data Science Summit
+      - recording due September 21
+      - live Q&A session October 5
+
+
+## August 10 2023
+
+Attendees: Erik, Jim, Mridul, Rick, Brad, Dan, Paul
+- Agenda:
+  - Mechanism to have backends extend the docstrings of NetworkX APIs
+    - online docs a snapshot in time; can look at all plugins
+    - better IPython function keyword tab-completions?
+  - Go over https://github.com/networkx/networkx/pull/6840
+    - `can_run(name, args, kwargs)`?
+  - Need to have a mechanism to generally have NetworkX discover the plugins that are installed, and how to access various attrs, etc.
+    - This is a common problem that's been solved (eg. pytest plugins do this, pluggy, etc.)
+    - Standard setuptools entrypoint features
+    - per-algorithm info, global info
+  - Configuration topic
+      - need to do this next meeting
+  - Example notebook: https://github.com/networkx/nx-guides/pull/115
+
+- Action Items:
+    - Erik (and Jim?) to update meeting frequency to weekly
+    - NX loopback - only needed for testing, remove for other use cases?
+
+
+## August 17 2023
+
+Attendees: Rick, Erik, Mridul
+- Agenda:
+    - updates
+        - [cugraph-nx PR](https://github.com/rapidsai/cugraph/pull/3614) merged into cugraph, conda/wheel package on the way
+        - upcoming Data Science Summit talk, abstract to be submitted soon
+    - Discuss / review: https://github.com/networkx/networkx/pull/6840
+    - `read_edgelist` or `from_pandas_edgelist` return backend object
+    - Configuration - how do NetworkX users configure/use specialized plugin features that aren't configurable via current NetworkX APIs?
+        - also related to config: how do users specify to use a backend or not?
+            - currently it's an env var
+            - other options include config mechanism as used by dask (naming convention that works in yaml and in API and env vars)
+                - donfig, but wouldn't want the dependency
+        - we can also have a config object, something which can be passed around, inspected, etc.
+
+- Brought up the notion of backends for plotting too
+
+- Action Items:
+    - Mock ups of the various approaches for different Graph objects, share github gists
+        - Answer the questions: should we have exposing backend graph types to the user as a long-term API pattern? Or, would it be better to extend the native Nx Graph types with different backends?
+    - Survey for new meeting time - currently too early for Pacific timezone
+        - https://crab.fit/nxdispatchmeetings2023-419405
+
+
+## August 24 2023
+
+Attendees: Rick, Erik, Mridul, Brad, Aaron
+
+- From last week, still need:
+    - Meeting time survey
+    - Mockups of the various approaches
+- Survey for new meeting time - currently too early for Pacific timezone
+    - https://crab.fit/nxdispatchmeetings2023-419405
+- add logging in networkx when e.g. converting
+- dispatch graph generation functions via `backend=...`
+- update graphblas-algorithms to use latest dispatch machinery
+- try-except around graph conversions and fallback to nx
+
+
+## August 31 2023
+
+Attendees: Rick, Erik, Dan, Mridul
+
+- Nightly NX docs are broken, related to recent change to backend \_\_repr\_\_, need to look into this
+    - other: Dan noticed `get_plugins()` shows warning that a plugin was already loaded if called >1 times
+
+- Backends dynamically updating docstrings - aka. "how do users discover plugins and their capabilities?"
+    - described process of community member(s) pushing a PR that adds their plugin to the doc generation environment, must get approved by NX core devs.
+        - This allows NX to decide what gets published on the official online docs
+    - docs string updates/backend description text should be installable on the system without requiring a "full install" of the plugin and its deps.  Ie. "I just want the doc updates, nothing else"
+
+- Mockups and API discussions
+    - Need to push mockup codes to a NXEP
+    - Create PR to https://github.com/networkx/networkx/tree/main/doc/developer/nxeps
+    - "AutoGraph"?, and eventually allows for things like "DistributedAutoGraph"?
+    - Have a followup meeting *after* NXEP is created
+
+- Need to finish the poll for the new meeting time for this meeting!
+    - Send the poll to others that may be interested: https://crab.fit/nxdispatchmeetings2023-419405
+
+
+## September 7 2023
+
+Attendees: Erik, Rick, Mridul
+
+- Meeting moved to Thursdays, 10:00am CT (same day, 1 hour later)
+- Continuation of the API discussions with the mockups, etc.
+    - Erik & Mridul at NumFOCUS next week, may be able to meet, else meet the week after
+- Status on Erik's work for extending docstrings
+    - Discussion on NX online docs build and if it will be able to install backends, have updated docstrings, etc.
+    - https://github.com/rapidsai/cugraph/pull/3848
+    - https://github.com/networkx/networkx/pull/6911
+- Getting more users (specific question for nx-cugraph): support for more algos on single-GPU, or start supporting multi-node multi-GPU (MNMG) for huge scale, or some of both?
+    - Some of both seemed preferred: add "low-hanging fruit" SG algos (algos that already map well to NX from cugraph), and start thinking about MNMG
+    - One algorithm that is distributed is probably "good enough" for a while
+
+### TODO
+- Rick submits NXEP (0005) based on previous discussion on API use cases/mockups.  Working title: "Supporting Native Backend Graph Types"
+- Setup next meeting for detailed API discussions
+    - include coverage for MNMG nx-cugraph
+
+
+## September 14 2023
+
+Attendees: Erik
+
+(no meeting, only Erik showed up)
+
+
+## September 21 2023
+
+Attendees: Rick Ratzel, Mridul Seth, Francisco Manuel Vazquez Fernandez
+
+### Topics/Notes
+- First meeting at the new time!
+- Still need an RFC-style doc (or something) to guide discussion on API mockups/questions/etc.
+- Mridul summarized conversation with Erik last week about nx-doa (dictionary of arrays)
+- NXAuto (or AutoGraph, or some other name) discussion
+    - is this provided by a plugin/backend, or is it part of NX's dispatch machinery?
+        - Initial thought was this should just be another plugin
+        - A thought was shared that having it be a part of NX as another graph type could make plugin development easier. It could be made a requirement that backends understand and interop with this type, which could be harder to achieve if it's a separate plugin that may or may not be installed, that all plugins have to depend on.
+    - when should we start working on this?
+    - high-level description of AutoGraph: "NX Graph with the addition of \_\_graph\_\_ dictionary, where keys are backend string names, and values are whatever the backend uses for graph representation (cugraph Graph, dataframe, dict of arrays, etc.)"
+    - Ideally this is very simple - a new Graph class that inherits from nx.Graph and adds the \_\_graph\_\_ dict.
+        - Future complexity would include support for intercepting graph read/write APIs to manage dirty flags for various backends
+- (one) longer-term requirement of dispatching - zero-code change support
+    - We seemed to have agreement on this.
+    - Maybe not so longer-term?  May need this very early on for initial demos.
+    - Described as the ability for a user to take their current code and run it with various plugins installed without changing their code.
+        - This implies some default behavior for NX dispatching to decide which backends to use when multiple are present
+        - Requirement still achievable if user must set an env var?
+
+### Action Items
+- Was: Rick submits NXEP (0005) based on previous discussion on API use cases/mockups, Now: Rick (or someone) submit some doc (which can eventually be an NXEP) to capture API mockups and discussion on user-facing API aspects of dispatching (use of graph types, kwargs, configuration API, etc.)
+    - include coverage for MNMG nx-cugraph
+
+
+
+## September 28 2023
+
+Attendees: Rick Ratzel, Erik Welch, Mridul Seth, Dan Schult
+
+### Topics/Notes
+- Topics from last time: AutoGraph and how that should be implemented (part of dispatching code or separate plugin)
+    - Really need the doc to from last week's action item (NXEP or something with API mockups)
+    - NETWORKX_AUTOMATIC_BACKENDS="auto,backend1,backend2"
+- What needs to go in to NX 3.2 release for dispatching:
+    - To happen sometime next week, starting with and RC
+        - python 3.12 final supposed to happen on Monday
+    - Need the following PRs:
+        - PR to allow nx graph generators to use backends - [PR 6876](https://github.com/networkx/networkx/pull/6876)
+        - PR for docstring extensions via backends - [PR 6911](https://github.com/networkx/networkx/pull/6911)
+        - New PR!  Change "plugin" to "backend" (Erik to do?) (see notes below)
+- DOA (dict-of-arrays)
+    - This could be a data structure layer used by backends to avoid lots of different conversions to different backend structures.
+    - [dschult Q] Is it dict keyed by attribute name to an array where rows/columns represent nodes? (answer is "yes")
+- Terminology: "backend" vs. "plugin"
+    - backend - something more specific?
+    - plugin - more general purpose extension mechanism?
+    - consenses was to not use the two interchangably, migrate toward the word "backend"
+        - there are places in the code that still use "plugin", would want to have those changed (in a backwards compatible way?) before 3.2
+
+
+## October 5 2023
+
+Attendees: Brad Rees, Rick Ratzel, Erik Welch, Mridul Seth, Jarrod Millman, Dan Schult
+
+### Topics/Notes
+- Deprecations scheduled to be removed in NX 3.2
+- Erik's PR to extend docstrings (and therefore the online NX docs) was demo'd
+    - We need to decide what version of the backend is being shown (nightly or stable?)
+    - For the time being, decision is to show nightly version
+- More discussion on AutoGraph
+    - Jarrod & Erik have reservations on how "auto" (ie. magical) it should be, as many users do not like unpredictable magic
+    - Mridul & Rick want to make sure "no-code-change" accelration via backends is supported (without excessive conversion costs)
+    - It was mentioned that backends are opt-in, which made them more acceptable to Jarrod
+
+
+## October 12 2023
+
+Attendees: Erik Welch, Rick Ratzel, Jarrod Millman, Mridul Seth, Dan Schult
+
+### Topics/Notes
+- Any updates needed before NX 3.2?
+    - Docs-related updates?
+- Other docs-related items:
+    - we don't have a way of showing examples
+    - how the signatures are changed by backends
+    - [Jarrod] Gallery examples?
+    - add a link to a RAPIDS notebook (to run on colab?)
+        - Action item: need to get NX team something they can include directly in their backends docs (separate from the "general info URL") that includes a demo notebook users can run on cloud (colab, etc.)
+- Add backend support for graph generators
+  - Action item: from_pandas_edgelist, from_scipy_sparse_array, a generator or two (i.e., barbell)
+- Dispatching configuration
+    - something for NX 3.3?
+    - donfig?  (dask-style config)
+        - or do we not want to add that dependency?
+    - dispatching config items
+        - do automatic dispatch?
+        - if so, which backends, priority, etc.
+        - algo-specific backend config (eg. pagerank should use these priorities, all others use global config)
+    - if AutoGraph is a backend, should it just handle all backend config?
+    - nx.config - dictionary that any backend (or anything else?) could use
+    - other things to configure beyond dispatching
+        - Graph multi edges or not?
+        - self loops?
+        - visualization
+        - github issue could be filed to get community feedback
+            - and/or NXEP
+- Logging
+    - similar to config (and uses config) - can be used for dispatching and other things
+    - could be very useful for debugging
+- Would also be nice to have an example workflow using dict-of-arrays
+    - This influences config (similar to AutoGraph)
+- What algos should nx-cugraph add next?
+    - Perhaps something on these?
+        - https://graph-tool.skewed.de/performance
+        - https://github.com/timlrx/graph-benchmarks
+        - https://github.com/snap-stanford/ogb
+    - subgraph isomorphism?
+    - other community detection (Leiden)?
+- Nvidia Data Science Virtual Summit slides due today.  Go over them here before submitting
+
+
+## October 19 2023
+
+Attendees: Erik Welch, Rick Ratzel
+
+### Topics/Notes
+- Many nx-cugraph specific topics between Erik and Rick
+
+
+## October 26 2023
+
+Attendees: Erik Welch, Rick Ratzel, Dan Schult, Jarrod Millman
+
+### Topics/Notes
+- create_using= in generator functions
+  - This option could conflict with the backend= kwarg.
+  - Currently nx-cugraph raises NotImplementedError when a custom class or non-backend instance is passed
+- When an error occurs in a backend, how do users report those?
+  - We suspect users will try to report everything to NetworkX, which could overwhelm NX community with errors they're not responsible for.
+  - One suggestion is to add a diaper pattern exception handler that prepends a message indicating that a backend raised this and possibly the bug report URL.
+  - Python 3.11 add a "add notes" feature to exceptions, which seems good for this.
+  - Rather than a free-form error message header provided by the backend, maybe the dispatcher just includes the "bug_report_url" from the backend.
+- How do we get more users to help us prioritize use cases for dispatching?
+  - Mridul mentioned he'd ask users in the Geo space.
+- A parallel algorithm would be good to learn from for backends supporting parallelism (nx-cugraph-mg?)
+- What do we want to see configuration-wise (Question for Jarrod)
+
+### Action Items/PRs to review
+- https://github.com/networkx/networkx/pull/7066
+- https://github.com/networkx/networkx/pull/7063
+- Mixed environment error msg "you should not see this message"[#7062]
+- [Mridul] Get more users for dispatching to get feedback on use cases, etc. (Mridul asks Geo space users?)
+- PyCon US (Pittsburg) topics? (December 18 deadline for submissions)
+
+
+## November 2 2023
+
+Attendees: Erik Welch, Mridul Seth, Rick Ratzel
+
+### Topics/Notes
+- NX survey, are we doing another?
+- Docs "additional backends available" box - should we move that to the top?
+- Conventions about backends raising exceptions. Should there be guidelines?
+  - Raise `NetworkXError` when appropriate to match when the default implementation would raise it? This sounds potentially easy to miss, but maybe provides the best experience?
+  - For exception conditions unique to the backend, encourage (or require?) backends to define their own exception class that inherits from `NetworkXError`?
+  - something else?
+  - Based on discussion, it sounds like we don't need this now but we can add it as a convention or case-by-case later.
+  - Add NetworkXBackendError?  This is also TBD based on what we experience.
+- PyCon US - anyone attending and submitting talk?
+    - December 18 deadline to submit talks
+    - potential topic: dispatching in NX
+- GNN use cases?
+    - NX has no APIs for sampling, this would be a case of a backend-only API
+        - How do docs work?  backend-only APIs would still be included in NX docs, with disclaimer that NX does not implement it.
+        - backend-only APIs require a PR to NX to add a stubbed-out API to match the backends signature.
+        - NX test suite will include a test for the backend-only stub APIs to ensure they raise NotImplementedError when backend is not installed.
+- [nx-cugraph] Should various algos allow `dtype=` kwargs?  Sounds like yes it should.
+
+
+## November 9 2023
+
+Attendees: Rick Ratzel
+
+**NO MEETING, only 1 attendee, moving topics to the next meeting**
+
+### Topics/Notes
+- AutoGraph - walk-through how we think this would work: what the user does to use it, how it should work, etc.
+- nx-parallel - are there plans for this to be a backend?
+
+
+## November 16 2023
+
+Attendees: Rick Ratzel, Mridul Seth
+
+### Topics/Notes
+- AutoGraph - walk-through how we think this would work: what the user does to use it, how it should work, etc.
+    - Discussed implementation details and requirements.
+- nx-parallel - are there plans for this to be a backend?
+    - Answer: yes
+
+
+## November 30 2023
+
+Attendees: Erik Welch, Rick Ratzel, Dan Schult, Mridul Seth
+
+### Topics/Notes
+- [Mridul] nx-parallel may have a new developer helping
+- [Mridul] Graph as a data structure - do we need to do anything technical/implementation now, or is this currently a messaging/marketing initiative?
+    - implementation details too early to tell, still exploring the use cases that benefit
+        - standard data interchange format/API - this could be nice to have
+        - [Dan] past discussion about frustrations with all the different graph representation formats. So we talked about building a new "better" one.
+
+
+## December 07 2023
+
+Attendees: Rick Ratzel, Erik Welch, Mridul Seth, Aditi Juneja
+
+### Topics/Notes
+- How do backends check inputs in a way that matches NetworkX's input checks?
+  - In the short-term (and also to keep for long-term) we should add tests to ensure arg checks are consistent with default NetworkX.
+  - Consenses seems that we'd like reusable arg checking utils, but we'll look into actually implementing it later.
+- Graph conversion caching
+    - backend algos that are called repeatedly from other algos end up doing excessive redundant conversions
+    - Erik proposed a short-term cache attached to the Graph object used for re-entrant calls, removed at the end of the call
+        - We'd still want AutoGraph since this is a cache that lives only for a single algo call
+    - This would be implemented generically for all backends as part of the dispatcher
+        - dispatch decorator may include an arg to indicate if the dispatcher should cache or not
+- Terminology: "default NetworkX" - the implementation delivered with NetworkX, used when no backends are eligable or installed
+
+### Action items
+- PyCon proposal due date is fast approaching!
+
+
+## December 14 2023
+
+Attendees: Rick Ratzel, Erik Welch, Aditi Juneja
+
+### Topics/Notes
+- AutoGraph name change - proposal: "nx-caching"
+    - Maybe name should incorporate graph conversion somehow
+- Configuration
+    - caching, or just more backends in general are also making configuration a higher priority
+- Logging
+    - It would be nice to have this relatively soon too as we add more backend
+- Backends and plugins :
+    - backends(some computations with graphs, nx-cugraph, nx-parallel) and plugins(more general purpose, nx-caching, for profiling, configuration)
+- Multiple backends
+    - idea of backends calling other backends
+    - using multiple backends(/plugins) together
+- PyCon topic
+    - We should have a clear call to action
+    - Erik's usage survey should be incorporated
+- Universal graph binary format
+    - "DOA" (dict of arrays) format is related. This could be formalized more and be used as the binary interchange format.
+    - Dan created [an issue](https://github.com/networkx/networkx/issues/7154)
+- Documentation for backend repos
+    - keep networkx and nx-parallel in sync(not dependent), but how much in sync?
+    - Currently a repo would want to document the various algos they provide - what's the best way to do that?
+    - backends can assume NetworkX docs (docstrings) are used, then backends can add backend-specific notes to those
+    - Recommendation was not to copy NX docs since that will be hard to keep in sync
+
+### Action items
+- PyCon proposal due 12/18 - Erik is working on this
+- Add topic for next meeting - if nx-parallel need to deviate significantly from NX API, how should that be handled?
+- Add issues to NX repo for various recurring topics in order to make progress on: configuration, caching, logging, etc.
+    - Read https://github.com/networkx/networkx/issues/7154 , answer any questions in the issue if possible
+- Mention next week's meeting on Discord since it may not be obvious that it's happening (or if it should be cancelled) due to US holiday
+
+
+## December 21 2023
+
+Attendees: Erik Welch, Rick Ratzel, Mridul Seth, Aditi Juneja
+
+### Topics/Notes
+- Caching conversions from algos that call other backend algos as part of the initial call (eg. algo A calls shortest_paths multiple times as part of the implementation)
+    - incremental closeness centrality, connected double edge swap, others?
+    - these are expected to be a very small set of use cases
+- NetworkX type annotations - will be in NX 3.2
+    - type checker is complaining that functions are returning dispatchable objs instead of what it expects
+    - issue : https://github.com/networkx/networkx/issues/3988
+- Backend-specific kwargs - how are these handled?
+    - It might be nice to have backend-specific kwargs either prefixed with the backend name (ex. to specify which GPU to run on: "cugraph_device=2"), or have a dictionary to pass in all backend-specific kwargs (ex. cugraph_kwargs={'device': 2}), or something similar. This would provide two benefits:
+        - self-documenting: it's obvious to users that these kwargs are not used by NX or any other backend.
+        - makes it safe and easy for other backends to ignore these, and obvious to users that they aren't used if the intended backend isn't selected
+- Drop-in compatible but backend-specific return types.
+    - We could avoid unnecessary conversion overhead for return types if a backend is able to return a drop-in compatible equivalent type
+        - An example could be, for nx-cugraph, returning a cupy array instead of a python list.  This keeps data on device and avoids a potentially expensive transfer from device to host.
+        - Assume this is opt-in, and if the user doesn't allow it the backends must convert to the default NX type as documented in the API docs
+        - If a non-default NX type is returned, it must be (reasonably?) API equivalent/drop-in compatible
+    - Suggestion: as long the backend return type is duck-type compatible, then it has met its "contractual requirements". Backend-specific return type options can then just be backend_kwargs. If we start to see common patterns/pain points, then we can re-visit if this has to be a new NX-wide dispatching feature.
+
+### Action Items
+- For next week's meeting: mention on discord if you're available to meet
+
+
+## December 28 2023
+
+Attendees: Rick Ratzel, Erik Welch
+
+### Topics/Notes
+- (only Rick and Erik attended, mostly talked about nx-cugraph)
+- Erik has ~6 NX PRs open, need to review these.
+    - one PR is a prereq for caching

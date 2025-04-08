@@ -1,0 +1,1238 @@
+# NetworkX Dispatch Meeting notes
+Meeting link:   https://anaconda.zoom.us/j/94192874965?pwd=K0wvcmhXem41ZlVSQ2l4TXlUaDgxdz09
+hackmd link:   https://hackmd.io/rqs_pWMxSLmICXCpI3w-Ug
+Archived notes: https://github.com/networkx/archive/tree/main/meetings/dispatching
+
+
+## January 04 2024
+
+Attendees: Rick Ratzel, Erik Welch, Aditi Juneja
+
+### Topics/Notes
+- Erik's PyCon talk submission, should hear back in 1 month
+- overview of recent NX dispatching PRs from Erik (typechecking, rename to `_dispatchable`, etc.)
+- Backend graph conversion APIs: `nx.to_backend_graph()` / `nx.to_networkx_graph()`
+    - `to_backend_graph()` - Does not exist yet, this meeting topic is to go over how/if it's to be added.  This API is intended for converting input (presumabely another backend graph, or a NX graph, or even data a backend understands) to a backend graph. The resulting backend graph is specified with the `backend=` kwarg.
+    - `to_networkx_graph()` - API that currently exists in NX used by NX graph constructors. There's some redundancy here if one thinks of NetworkX itself as a backend (IOW, this seems like the same operation could be done with `to_backend_graph(backend="networkx")`), however, the args for `to_networkx_graph()` are fairly specific to creating NX graphs
+    - options:
+        ```
+        @nx._dispatchable(graphs=None)
+        def to_backend_graph(
+            G,
+            backend,
+            *,
+            edge_attrs=None,
+            node_attrs=None,
+            preserve_all_attrs=False,
+            preserve_edge_attrs=False,
+            preserve_node_attrs=False,
+            preserve_graph_attrs=False,
+            **kwargs,
+        ):
+        ```
+
+        ```
+        @nx._dispatchable(graphs=None)
+        def to_backend_graph(
+            G,
+            backend,
+            *,
+            edge_attrs=None,
+            node_attrs=None,
+            preserve_attrs=("edge", "node", "graph"),
+            **kwargs,
+        ):
+        ```
+
+- "dispatchable only" NX APIs
+    - A backend should be able to add functionality to NX, even if NX does not already have a default implementation.
+    - This would require someone to add the corresponding API to NX, decorate it with `@_dispatchable`, and have it simply raise `NotImplementedError`.
+        - The stub API should also have a proper docstring
+            - This effictively becomes the requirements doc for other implementations
+        - The NX community/core devs should review the stub API and its docstring
+            - This is somewhat of a new responsibility: thinking about the API signature itself as a feature of NX, if it scales to other implementations, if it's consistent with other APIs, etc.
+
+## January 11 2024
+
+Attendees: Mridul Seth, Rick Ratzel, Erik Welch, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+
+- how should we set up context managers to a backend. backend config? function kwargs? global config options?
+    - Provide nx.backend_config as a configuration dictionary. Backends look for an entry e.g. nx.config looks like: `{"nx-parallel": {"n_jobs": 2, "backend": "loki"}}`
+    Have the get_info information include a default set of option values (the default option dict). This could be loaded into nx.backend_config or if that is too slow, those could be loaded upon import of the backend.
+        User interface:
+        `nx.backend_config["nx-parallel"]["n_jobs"] = 5`
+        `b=nx.betweenness_centrality(G)`
+
+        The code inside nx-parallel could look like:
+        `conf = nx.backend_config["parallel"]`
+        `joblib.Parallel(**conf)`
+### GSOC:
+Erik's ideas:
+ - scipy.sparse backend
+ - numpy backend
+ - data-only backend (e.g., backed by Arrow, or np arrays, or  dataframes, `nx-doa`, etc.)
+ - graphblas-algorithms... (new algs or ease package)
+ - pandas `df.nx` or `df.graph` accessor
+ - automated comparisons of backends: benchmarking and testing
+ - backend configuration, logging, introspection, etc.
+ - viz backend (maybe graphistry)
+
+ GSOC deadline for orgs to apply:  Feb 6 [overall timeline](https://developers.google.com/open-source/gsoc/timeline)
+
+
+## January 18 2024
+
+Attendees: Rick Ratzel, Erik Welch, Aditi, Mridul
+
+### Topics/Notes
+- Aditi to discuss docstring updates motivated by nx-parallel(https://github.com/networkx/networkx/pull/7219)
+    - approved
+- GSoC followup discussion (due Feb 6?)
+    - existing project proposed to re-do matplotlib visualization (`nx.draw()`)
+    - scipy.sparse backend - do we need this if we have caching?
+    - (Google seems to favor AI projects, they have a checkbox you select if you're an AI project)
+    - Re: AI projects - perhaps a GNN-related project?
+    - graphblas algorithms
+    - better docs (aka "documentation infrastructure")
+- Mridul's POC for caching: https://github.com/networkx/networkx/pull/7233
+    - we should get this in the next NX release
+    - NXEP still needs to be done, need a PR for that
+        - also need a NXEP for dispatching
+- shared infra for input checking
+    - It would be nice if backend developers did not have to re-implement input checks that should match NX's checks.
+    - Decorator?  Less sophisticated approach would be to refactor code to break out checks into separate functions that anything can call.
+- config
+    - should the namespace be just "config" and we remove the word "backend" from it?
+        - ans. yes, should just be "config", we can add a "backend" namespace underneath if desired
+- Can we talk to individuals/companies to get feedback on use cases for backends, or feedback in general?
+    - SciPy (academic), PyCon (more companies?)
+- SciPy call for proposals open
+
+
+## January 25 2024
+
+Attendees: Erik Welch, Rick Ratzel, Dan Schult, Aditi Juneja
+
+### Topics/Notes
+- if a function is called with a backend graph class, but the backend function raises NotImplemented, what should we do?  If `backend=...` is used, we should raise.  Even if backend is not set, raising now is good.  When we add `to_backend_graph` for backend-to-backend conversions, we could handle this differently. Go through the list of prioritized backends and choose another one to try.
+- `should_run(...)`
+  - describe the problem this is solving:
+    - "When a backend can support an operation, but it's known (or even believed) that the default NX impl is better suited for the call, should_run() will return False and the dispatcher will select another backend."
+  - This is allowing the backend developer to have the user's best interest in mind
+  - As always, overrideable in config (or by `backend=` argument)
+  - This makes logging even more necessary, since it will be hard to predict which backend will run.
+      - and introspection capabilities (functions that can tell you want is happening or would happen)
+  - Perhaps, in addition to or instead, this is a reason to have a more fine-grained backend preference config capability?
+      - maybe have can_run should_run return a string along with bool that explains the reason.
+- Some algorithms return a graph and take a graph as input. Is it OK if they are different backend types between input and output?
+    - we like the idea that the return type should be the same as the input type. But we are still processing the best way to do that. (who does the conversion? what kind of error? do we auto-double convert, or lean on can_run or should_run?) Remember that the should_run is a nice-to-have... and actually can_run is too.
+- Mridul's POC for caching
+  - This has been well received so far, both among the dispatching subset and in the general Wednesday meetings (sure, it's largely the same group, but still...)
+  - How shall we proceed?
+- Config keeps coming up quite often in various design discussions
+  - Like other features we've been discussing, maybe we should start an NXEP.
+  - A POC PR like Mridul's caching POC?
+
+
+## February 01 2024
+
+Attendees: Erik Welch, Rick Ratzel, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+(continued from last week)
+- Config keeps coming up quite often in various design discussions
+  - Like other features we've been discussing, maybe we should start an NXEP.
+  - A POC PR like Mridul's caching POC?
+  - PR [7225](https://github.com/networkx/networkx/pull/7225)
+      - Very simple dictionary-based solution (`nx.config["automatic_backends"] = ["backend1", "backend2", ...]`), NX code, backends, etc. just access this directly.
+          - or nx.config["backends"]["cugraph"]
+          - or nx.config["backend_cugraph"]
+          - or nx.config["cugraph"] = nx_cugraph.Config(device=0, spilling=True)  # example of cugraph backend using its own config obj
+          - however, nx.config["parallel"] could be too ambiguous. Perhaps we need a little hierarchy to start, like nx.config["backends"]["cugraph"] ?
+              - backends_config = nx.config["backends"]
+              - backends_config["parallel"] = ...
+      - backend's `get_info()` can update `nx.config` with default config values.
+- Mridul's POC for caching
+  - This has been well received so far, both among the dispatching subset and in the general Wednesday meetings (sure, it's largely the same group, but still...)
+  - How shall we proceed?
+
+(new items)
+- Several PRs still open (Erik's) that could be blocking progess on dispatching in general
+    - should_run() (PR 7257)
+    - more metadata: "returns graph" to assist in matching input/output types (PR 7191)
+    - Pass backend graphs to NX Graph constructor (PR 7259)
+- GTC 2024 talk
+
+### Action Items
+- Erik to update config PR
+- Dan starts NXEP for config
+- Everyone reviews PRs
+
+
+## February 08 2024
+
+Attendees: Erik Welch, Rick Ratzel, Mridul Seth, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+- caching: would be nice to have caching support in NX 3.3
+    - Erik mentioned he'd like to work on this
+    - building on this: should we cache other things, like scalar return values?  Example: number connected components return value
+    - cache dunder should live on the graph.
+- NX dependants
+    - Erik will have a PR to share this
+- Logging PR
+    - Rick will push this
+- nx-joblib
+    - issue: PR that updates backend_info was merged, but online docs do not show nx-parallel as an available backend
+        - Mridul looking into it
+- docs suggestions
+    - feedback on the "runs on backends" box that's part of API docs being at the bottom is hard to notice
+        - suggestion: move to the top but make it small
+- What do we want to get done for NX 3.3?
+    - caching
+    - config
+    - logging
+    - NXEPs
+    - nx-joblib rename and showing in docs
+- Open PRs - trying to get these in for 3.3 (unless otherwise noted)
+    - [7259](https://github.com/networkx/networkx/pull/7259) support `nx.Graph(backend_data)`, not necessarily something for 3.3, nice-to-have
+    - [7257](https://github.com/networkx/networkx/pull/7257) should_run
+    - [7233](https://github.com/networkx/networkx/pull/7233) caching PoC
+    - [7226](https://github.com/networkx/networkx/pull/7226) track parallel TODO comments
+    - [7225](https://github.com/networkx/networkx/pull/7225) add nx.config
+    - [7219](https://github.com/networkx/networkx/pull/7219) rename `func_info` keys
+    - [7191](https://github.com/networkx/networkx/pull/7191) `mutates_input=` and `returns_graph=`
+    - *placeholder for logging PR*
+- NXEPs
+    - config
+    - dispatching
+- (old topic from Dec 2023)
+    - Backend-specific kwargs - how are these handled?
+        - It might be nice to have backend-specific kwargs either prefixed with the backend name (ex. to specify which GPU to run on: "cugraph_device=2"), or have a dictionary to pass in all backend-specific kwargs (ex. cugraph_kwargs={'device': 2}), or something similar. This would provide two benefits:
+            - self-documenting: it's obvious to users that these kwargs are not used by NX or any other backend.
+            - makes it safe and easy for other backends to ignore these, and obvious to users that they aren't used if the intended backend isn't selected
+    ```
+    >>> nx.pagerank(G, cugraph_kwargs={"device": 1}, joblib_kwargs={"njobs": 4})  # IF cugraph used pass device=1, IF joblib used pass njobs=4
+    >>> nx.pagerank(G, backend="cugraph", device=1)  # Force cugraph backend to be used and pass device=1
+    ```
+
+## February 15 2024
+
+Attendees: Jarrod Millman, Rick Ratzel, Ralph Liu, Mridul Seth, Aditi Juneja, Erik Welch, Dan Schult
+
+### Topics/Notes
+
+- [name=MridulS] https://scientific-python.org/specs/spec-0002
+
+- Face-to-face meeting at GTC (San Jose, CA, March 17-21)
+    - Potential attendees: Rick, Mridul, Brad R., maybe Erik, maybe Ross
+    - Maybe a topic for the general meetings on Wednesdays?
+    - What should the goals of the meeting be?
+        - dispatch-centric, general, both?
+
+- Open PRs (continued from last week)
+    - see list from last week
+    - Just added a simple logging PR [7300](https://github.com/networkx/networkx/pull/7300)
+    - Are there any that are important for dispatching to get in to the 3.3 release?
+        - 3.3 features may be assumed to be in place in time for the next talk (GTC)
+        - [name=Jarrod] release candidate (beta on Feb 23rd)
+
+- docs (continued from last week)
+    - Aside from the suggestion to move the "runs on backend" box in the API docs, initial feedback mentioned that it's hard to understand what's available.
+        - One suggestion was to add a page dedicated to dispatching to the user-facing documentation: https://networkx.org/documentation/latest/
+        - Audience is NX users, and the doc needs to explain the concepts, options available, tradeoffs, etc.
+        - This page could also list the current set of backends available?
+        - This would also be good to have in place before the next talk
+            - and may also help with content for the talk.
+    - NXEPs
+        - This addresses the need for developer-facing docs
+        - Might also be good to have in time for the next talk, but less so than user-facing docs?
+    -  https://pydata-sphinx-theme--1564.org.readthedocs.build/en/1564/
+    -  https://pydata-sphinx-theme.readthedocs.io/en/stable/user_guide/web-components.html#dropdowns
+    - [ ] update install
+    - [ ] top-level page (named dispatching / backends between graph types and algorithms)
+    - [ ] update reprs to make it easy to find backends more noticables
+    - [ ] update [spec 2](https://scientific-python.org/specs/spec-0002/) with note about documentation standards
+    - [ ] NXEP brain dump of what we're doing and why (more developer facing)
+
+- rapids dispatching
+  - pandas / cudf
+  - networkx / nx-cugraph
+  - scikit-learn / cuml
+  - scikit-image / cucim?
+
+- https://www.youtube.com/watch?v=57DXVHOxdAI&list=PL7rNFJDy0iz5GGSmRQNMO-qF6PUG3YsQx
+
+
+## February 22 2024
+
+Attendees: Jarrod Millman, Mridul Seth, Rick Ratzel, Erik Welch, Aditi Juneja
+
+### Topics/Notes
+
+- PRs
+  - What is the minimal set of PRs needed for 3.3?
+    - Caching PR [7283](https://github.com/networkx/networkx/pull/7283) and [7233](https://github.com/networkx/networkx/pull/7233)
+        - Implies caching of backend conversions in place too
+    - Mutates-inputs PR [7191](https://github.com/networkx/networkx/pull/7191)
+  - Others that would be nice to have
+    - Transmogrify objects->functions PR [7298](https://github.com/networkx/networkx/pull/7298)
+    - config [7225](https://github.com/networkx/networkx/pull/7225)
+    - should_run [7257](https://github.com/networkx/networkx/pull/7257)?
+    - from/to_backend graph
+    - logging
+    - Aditi's PRs
+
+- numpy 2 release schedule
+    - 1st week of March
+    - should we wait for this?
+        - rc or beta release should allow users to test NX with numpy 2
+
+- backend cookie-cutter/example
+    - backend developers start with this, add their code
+    - makes it easy to include best practices
+    - https://github.com/networkx/networkx/pull/7305
+    - https://github.com/Schefflera-Arboricola/nx-j4f
+
+- scikit-learn logging api discussion
+    - https://github.com/scikit-learn/scikit-learn/issues/17439
+
+
+## February 29 2024
+
+Attendees: Rick, Erik, Aditi, Mridul Dan
+
+### Topics/Notes
+
+- PRs
+    - Caching PR [7283](https://github.com/networkx/networkx/pull/7283) and [7233](https://github.com/networkx/networkx/pull/7233)
+        - 7233 is still POC
+            - this is general-purpose, can be used for scipy sparse array conversions
+                - but maybe a scipy-sparse backend would be better?  Or is that too much work that could be done with a simple cache?
+                -
+    - Others we might want for 3.3 (before the rc)?
+        - backend doc updates [7305](https://github.com/networkx/networkx/pull/7305)
+            - This PR brought up details about testing backends with NX tests. It might be nice to think about simplifying how we do that, or maybe just a doc on the topic somewhere for backend devs?
+        - logging [7300](https://github.com/networkx/networkx/pull/7300)
+            - Should consider this: https://github.com/scikit-learn/scikit-learn/issues/17439
+                - maybe another future topic
+        - config [7225](https://github.com/networkx/networkx/pull/7225)
+            - lots of discussion on this, need a followup discussion topic
+                - longer-term, a project using NX might want to configure NX in their pyproject.toml
+        - should_run [7257](https://github.com/networkx/networkx/pull/7257)
+            - postpone until config and logging are merged
+            - we also need to discuss introspection more too
+        - (DRAFT) from/to_backend graph [7294](https://github.com/networkx/networkx/pull/7294)?
+            - ready for feedback, but it need not be prioritized for 3.3
+
+- Conferences - any action items that need addressing, or general updates to share?
+    - GTC
+        - Rick to get updated slides to Mridul
+    - PyCon
+        - We should attend
+    - SciPy
+        - We should submit dispatching talk, Rick coordinate w/ others (Mridul) on this, Erik cannot attend.
+
+- Backend graph type conversions
+    - Erik's slides
+        - These are good and we should discuss more at a future meeting (started them but ran out of time)
+
+- Backends for nx.Graph (and family) _did not discuss, will be a future topic_
+    - For example, how would a graph DB backend support the zero-code change UX?
+        ```
+        G = nx.Graph()
+        G.add_edge()  # this could/should? add the edge to the graph DB
+        G.edges()  # this could/should? retrieve from the graph DB
+        ```
+
+## March 07 2024
+
+Attendees: Anthony Mahanna, Rick Ratzel, Erik Welch
+
+### Topics/Notes
+- PRs
+    - Quick discussion on PRs needed for 3.3, continued from last week
+        - Caching PR [7283](https://github.com/networkx/networkx/pull/7283) and [7233](https://github.com/networkx/networkx/pull/7233)
+            - 7233 is still POC, this is general-purpose, can be used for scipy sparse array conversions
+    - Others we might want for 3.3?
+        - config [7225](https://github.com/networkx/networkx/pull/7225)
+            - also see discussion topic on this below
+        - backend doc updates [7305](https://github.com/networkx/networkx/pull/7305)
+        - (DRAFT) from/to_backend graph [7294](https://github.com/networkx/networkx/pull/7294)?
+
+- config
+    - Continue discussion started at yesterday's general meeting
+    - Might be good to get this in for caching
+    - Implementations and interfaces:
+        - Simple dictionary?
+        - Config class?
+            - has the benefit of avoiding typos
+            -
+
+- backends for graph types
+    - Current implementation allows 3rd party graph types to be passed as `G` to functions and be dispatched correctly, but there may be a need to dispatch methods on a nx.Graph to backend implementations in order to keep no-code-change experience.
+    - Example would be a graph DB backend - it might be nice if the standard nx.G could be backed by a graph DB.
+
+
+## March 14 2024
+
+Attendees: Erik Welch, Anthony Mahanna, Rick Ratzel, Mridul Seth, Aditi Juneja
+
+### Topics/Notes
+- 3.3 RC
+    - might be delayed due to numpy release
+
+- caching (continued from yesterday)
+    - initially for backend conversion only
+        - return value function caching deferred to >3.3
+    - opt-in using env var e.g. `NETWORKX_CACHE_CONVERTED_GRAPHS`, or config setting
+    - raise a warning (UserWarning)
+        - would be good to include link to a doc to explain why the warning, how to prevent problems, etc.
+        - can be changed to a log message later (log_level=warning)
+
+- env var `NETWORKX_AUTOMATIC_BACKENDS` -> `NETWORKX_BACKEND_PRIORITY` name change is in the config PR [7225](https://github.com/networkx/networkx/pull/7225)
+    - we should get this change publicised ASAP if possible
+
+- PRs for 3.3
+    - [7345](https://github.com/networkx/networkx/pull/7345) - caching backend graph conversions
+        - update this to raise a warning too
+    - [7225](https://github.com/networkx/networkx/pull/7225) :tada: config (prereq for caching PR?)
+    - [7305](https://github.com/networkx/networkx/pull/7305) - updated docs for backend
+    - [7300](https://github.com/networkx/networkx/pull/7300) - logging (still a "maybe")
+        - maybe better to get these in early?
+        - or use `warnings.warn` for now
+
+- config
+    - main namespace should be okay, especially since config can apply to more than backends in the near future (viz, others)
+    - `strict=False` use case
+        - motivated by nx-parallel and passing arbitrary joblib kwargs
+        - still considering other options, such as a `joblib_kwargs` config var that's simply a dict of joblib args to pass as-is
+    - portability use case
+        - if config code is present for a backend that isn't installed, is that an error?
+        - similar in concept to backend_kwargs
+
+- `nx.config.cache_backend_conversions` - need a better name?
+    - `cache_converted_graphs` +++
+    - `cache_backend_converted_graphs`
+    - `cache_backend_graphs`
+    - `cache_converted_backend_graphs`
+
+
+## March 21 2024
+
+Attendees: Anthony Mahanna, Alexander Geenen, Rick Ratzel, Erik Welch, Mridul Seth, Aditi Juneja, Ross Barnowski, Dan Schult
+
+### Topics/Notes
+
+- Anthony and Alex go over their example mockup of how a user would write code using NX with an ArangoDB backend
+
+
+## March 28 2024
+
+Attendees: Matt Schwennesen, Rick Ratzel, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+- Matt's PR [7371](https://github.com/networkx/networkx/pull/7371) - using kwargs for TSP
+    - There's a concern about the change consuming all unrecognized kwargs and not flagging things like user typos.  Do we have the same problem with dispatchable functions consuming all extra kwargs as backend_kwargs?
+    - related: PR [7297](https://github.com/networkx/networkx/pull/7297) for handling backend kwargs
+
+- PRs for 3.3
+    - [7345](https://github.com/networkx/networkx/pull/7345) - caching backend graph conversions
+        - update this to raise a warning too
+    - [7300](https://github.com/networkx/networkx/pull/7300) - logging (still a "maybe")
+        - maybe better to get these in early?
+        - or use `warnings.warn` for now
+
+- Continued discussion on Graph DB possibilities using this mockup:
+    ```python
+    user@machine> NETWORKX_BACKEND_PRIORITY="arangodb,cugraph" python
+    Python 3.10.13 | packaged by conda-forge | (main, Oct 26 2023, 18:07:37) [GCC 12.3.0] on linux
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>> import networkx as nx
+    >>> import nx_arangodb as nxadb
+    >>>
+    >>> G = nxadb.Graph(server="dgx21.nvidia.com", port=8888, name="demo")  # access the demo graph - this is non-portable code
+    >>> #G = nx.Graph(arangodb_kwargs={server:"dgx21.nvidia.com", port:8888, name:"demo"})  # access the demo graph
+    >>> subG = G.query("""FOR u IN users
+    ... FILTER age == 21
+    ... RETURN u""")  # Anthony pointed out this query will return a list of nodes!  Pretend it's a subgraph for this :)
+    >>> communities = nx.community.louvain(subG)  # use cugraph to compute the louvain communities
+    ```
+
+## April 4 2024
+
+Attendees: Erik Welch, Rick Ratzel, Dan Schult
+
+### Topics/Notes
+- Dan's [docs PR](https://github.com/networkx/networkx/pull/7389) needs further review
+    - NX 3.3 release may be waiting for this
+- Matt's tutorial
+    - would be good to have content that covers dispatching, if possible.
+- Graph DB discussion
+    - binsparse as a potential universal intermediate graph repr?
+
+
+## April 11 2024
+
+Attendees: Rick Ratzel, Aditi Juneja, Dan Schult, Erik Welch
+
+***Happy 1-year anniversay of NetworkX Dispatching meetings!***
+
+### Topics/Notes
+- Discuss [PR 7404](https://github.com/networkx/networkx/pull/7404) : mostly just moved things around and added [a pt about slow testing](https://github.com/networkx/networkx/blob/cabb00ec0664bf88946c34ca3fd2c21594518bdc/networkx/utils/backends.py#L191)
+    - Q: Should there be an explanation about why testing needs to/should set the `NETWORKX_TEST_BACKEND` and `NETWORKX_FALLBACK_TO_NX` env vars?
+        - A: The file `networkx/utils/backends.py` does describe in the "Testing the Custom backend" section
+        - Suggestion was to add a few lines describing further how setting those env vars affect testing
+- Caching discussion topics mentioned in yesterday's general call (deferred until Erik is in attendance (he showed up later but no time left))
+    - [PR 7344](https://github.com/networkx/networkx/pull/7344) Minimal caching setup
+    - [PR 7345](https://github.com/networkx/networkx/pull/7345) caching for backends
+    - When should the cached values be cleared? Should it depend on what is changed?
+    - Should we try to identify when data attributes have been changed?
+    - How to identify changes like `nodelist` for `to_scipy_sparse_array`
+    - hash of the inputs to the function? hash of the data values in the graph?
+    - name of function and str of inputs (while forcing users to turn on caching using a keyword arg that warns them not to change the graph between calls. Only functions that know to turn on caching could use it.)
+    - maybe put caching flags in the config?
+- Continue Graph DB discussion
+    - There's been continued interest in the use case outlined in the mockup script shown at the March 21/28 meetings:
+    ```python
+    user@machine> NETWORKX_BACKEND_PRIORITY="arangodb,cugraph" python
+    Python 3.10.13 | packaged by conda-forge | (main, Oct 26 2023, 18:07:37) [GCC 12.3.0] on linux
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>> import networkx as nx
+    >>> import nx_arangodb as nxadb
+    >>>
+    >>> G = nxadb.Graph(server="dgx21.nvidia.com", port=8888, name="demo")  # access the demo graph - this is non-portable code
+    >>> #G = nx.Graph(arangodb_kwargs={server:"dgx21.nvidia.com", port:8888, name:"demo"})  # access the demo graph
+    >>> subG = G.query("""FOR u IN users
+    ... FILTER age == 21
+    ... RETURN u""")  # Anthony pointed out this query will return a list of nodes!  Pretend it's a subgraph for this :)
+    >>> communities = nx.community.louvain(subG)  # use cugraph to compute the louvain communities
+    ```
+    - Dan mentioned that ~15 years ago, an issue was filed suggesting NX should have a "query" method.
+        - (update: found [this issue](https://github.com/networkx/networkx/issues/1631), which is more recent than ~15 years so still looking)
+        - Should that be revisited?
+        - It led to methods being added for "get_node_attr", "set_node_attr"
+        - Python has since made things like list/dict comprehensions more common place.  Could `query` accept a callable that used those mechanisms?
+        - There's currently filters on the graph views, is this similar to a query?
+        - Should query always return a graph object (likely a subgraph in the graph DB)?
+    - Should graph DB features be part of a separate library, possibly still in the NX github org?
+    - Similar to visualization use cases in some ways - users like the tie in but the implementation is largely provided by other libs
+
+
+## April 18, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Anthony Mahanna
+
+### Topics/Notes
+- link to choose new meeting time for meetings starting ?week of April 25?
+    - https://crab.fit/nxdispatchmeetings2024-921582
+- (short meeting, planned to discuss open questions on caching but felt others should be present)
+
+
+## April 25, 2024
+
+Attendees: Erik, Mridul, Dan, Anthony, Aditi
+
+***First meeting at the new time of 10am PT***
+
+### Topics/Notes
+- Continuation of previous topics/check for updates:
+    - Was this done?  Q: Should there be an explanation about why testing needs to/should set the `NETWORKX_TEST_BACKEND` and `NETWORKX_FALLBACK_TO_NX` env vars?
+        - A: The file `networkx/utils/backends.py` does describe in the "Testing the Custom backend" section
+        - Suggestion was to add a few lines describing further how setting those env vars affect testing
+    - Caching discussion
+        - [PR 7344](https://github.com/networkx/networkx/pull/7344) Minimal caching setup
+        - [PR 7345](https://github.com/networkx/networkx/pull/7345) caching for backends
+        - When should the cached values be cleared? Should it depend on what is changed?
+        - Should we try to identify when data attributes have been changed?
+        - How to identify changes like `nodelist` for `to_scipy_sparse_array`
+        - hash of the inputs to the function? hash of the data values in the graph?
+        - name of function and str of inputs (while forcing users to turn on caching using a keyword arg that warns them not to change the graph between calls. Only functions that know to turn on caching could use it.)
+        - maybe put caching flags in the config?
+
+- Backend-to-backend conversions
+
+- Backends for Graph objects
+    - Anthony has/will have an implementation of a duck-typed MultiDiGraph class that accesses (read and write) an ArangoDB graph database.
+    - Conceptually, this offers the same UX as algorithm backends: The same NX interface (in this case, a Graph object) with a different implementation.
+    - The goal would be to provide a way for other "graph storage" mechanisms to participate in the NetworkX API in a standard way, much like current backends do for algorithms.
+        - Is another goal to enable a no-code-change UX to users? Is this practical given that, for example, users must know *somewhere* that they're accessing a graph from a database? At the very least, they have to specify a server and maybe other things.
+    - Resistance to the idea may be that it isn't an actual NX type anymore, i.e. "I expect a nx.Graph() to be the dict-of-dict implementation I've always known".
+        - But is that just a matter of perspective?  What if nx.Graph() is more of an interface (strict contract) than a specific implementation?
+
+- ENH(Erik):
+    - bundle and ignore backend env variables
+    - backend to backend graph conversions in networkx
+
+- open dispatch PRs:
+    - https://github.com/networkx/networkx/pull/7294
+    - https://github.com/networkx/networkx/pull/7404
+    - https://github.com/networkx/networkx/pull/7300
+
+
+## May 2, 2024
+
+Attendees: Erik, Mridul, Dan, Aditi
+
+### Topics/Notes
+
+- We should plan about designing backend - backend conversion. Maybe try to get this into next NX release.
+- Check if we can remove the logic around checking the uniqueness of entries in the entry points list in py3.9+ (relavent issue https://issues.redhat.com/browse/RHEL-26149)
+
+
+## May 9, 2024
+
+Attendees: Rick Ratzel, Mridul Seth, Ralph Liu, Anthony Mahanna, Erik Welch (~10 minutes), Aditi Juneja
+
+### Topics/Notes
+
+- ArangoDB integration demo
+  - This consumed the entire meeting :)
+
+
+## May 16, 2024
+
+Attendees: Matt Schwennesen, Mridul Seth, Rick Ratzel, Anthony Mahanna, Dan Schult, Aditi Juneja
+
+### Topics/Notes
+
+- PyCon & SciPy topics:
+  - Anthony volunteered content to include for Mridul & Erik's PyCon talk for the ArangoDB integration
+  - Anthony also volunteered content for the SciPy talk
+
+- Continuation of caching discussion
+  - Do we have an idea of when some of the open questions need to be resolved?
+    - No timeframe.  We think the current behavior is satisfactory and safe.
+    - We could also include an example of how to suppresss
+  - Use case seems to be well-understood, but we still don't seem to have a proposal we like.
+
+ - Logging PR questions
+     - [Aditi raised some questions worth discussing](https://github.com/networkx/networkx/pull/7300#discussion_r1575936882):
+         - do we want to add an env var, or just stick to standard logging API calls to enable/disable?
+         - how do/should nested dispatchable functions be logged (perhaps a question about python logging in general)? For example, if backend A has a dispatched function that calls A.foo and A.bar, will both functions be logged?
+
+
+## May 23, 2024
+
+Attendees: Erik Welch, Rick Ratzel, Dan Schult, Anthony Mahanna, Aditi Juneja
+
+### Topics/Notes
+
+- Reminder: please participate in the latest [crabfit](https://crab.fit/nx-dispatching-850688)
+
+(most topics below are continuations from discussions at PyCon)
+
+- ArangoDB mentioned in Erik & Mridul's PyCon talk, was presented and received well
+    - Anthony still need various approvals to push the backend to PyPI and GitHub with docs, etc.
+    - Keep code in an ArangoDB GH org, but in the future there may be something under the NetworkX org for contributors?
+        - Maybe a doc or repo in the NX GH org for enumerating all the known backends?
+        - Is there a readthedocs theme that should be used?
+            - Dan: NX uses numpydocs theme
+        - Add nx-arangodb to NX docs?
+            - if so, look at: https://github.com/networkx/networkx/pull/7220
+    - Discussed backend-to-backend again, since nx-arangodb emphasizes the need for it.
+
+- Action item from Erik/Mridul NX talk Q&A:
+    - Need to refine and explain the "experimental" term used in the dispatching docs
+    - (Rick can file an issue and/or submit a PR)
+        - Aditi suggested just adding to [PR 7404](https://github.com/networkx/networkx/issues/7404), Erik suggested just adding a suggestion comment to that PR
+
+- caching
+    - ensuring cache consistency is hard.  As Erik pointed out, our current approach should cover 95%+ use cases.  What about the remaining 5%?
+        - ID "the remaining corner cases"
+        - Maybe just explain in docs?
+        - add additional options (if so, what?)
+        - Issue [#7456](https://github.com/networkx/networkx/issues/7456)
+        - Function caching: Rick to file an issue describing it for tracking
+
+- config discussion
+    - Did we have additional options needed from the caching discussion?
+    - config "frontend" code needed?  Code that reads env vars, YAML, INI files, etc. and converts to config API calls on import.
+        - update: Erik mentioned that the code to map env vars to setting config vars is already in place
+        - we should look at other packages to see how best to read from config files (look for conventions, best practices, etc.)
+    - Related: [issue 7456](https://github.com/networkx/networkx/issues/7456)
+
+- Aditi's J4F backend
+    - Can/should we formalize this as a separate repo in the NX GH org?  This would be great for new backend developers to help get started easily (copy repo contents, change meta-data, add code, publish!)
+    - Combine with `nx-loopback`?
+        - if we do this, can NX unit tests still install and use loopback just as easily?
+        - What if nx-loopback stayed in the repo, but was updated to live in a subdir that could be treated as the root of a new backend's repo?
+        - Is `nx-testbackend` a better name?
+        - Related: [PR 7369](https://github.com/networkx/networkx/pull/7369) (add Backend Protocol to aid backend developers)
+        - Rick to add issue for this
+
+- Benchmarks (possibly a longer-term goal?)
+    - dispatching talks advertise "benchmarks for free", but could this possibly be more drop-in, similar in nature to how the online NX docs get updated with backend-specific quirks?
+        - challenge here may be that different backends specialize in different use cases (eg. support for very big graphs)
+        - what would the "drop-in" mechanism be?  Additional metadata provided to indicate that the NX benchmarks should include a particular backend?  Push a PR somewhere to add a backend to the regular run?  Something else?
+            - Alternate suggestion would be to add links to backend-specific benchmarks in the docs?
+
+
+## May 29, 2024
+
+Attendees: Rick Ratzel, Ralph Liu, Mridul Seth, Aditi Juneja, Anthony Mahanna
+
+### Topics/Notes
+
+ - Anthony working on getting nx-arangobd open-source and released as a pyPI package, github public repo, and readthedocs
+    - approx 2 weeks?
+    - waiting on rust package, possibly other things
+
+ - Issues filed based on recent discussions
+    - https://github.com/networkx/networkx/issues/7456
+    - https://github.com/networkx/networkx/issues/7468
+    - (should an issue be filed for last week's benchmark discussion?)
+        - ASV is nice for plots
+        - [conbench](https://github.com/conbench/conbench) could also be an option
+        - Is there an old discussion on this? If not, file one
+
+ - "experimental" feedback topic
+    - Added comment [here](https://github.com/networkx/networkx/pull/7404#discussion_r1619215640)
+
+ - Need resolution on [logging PR](https://github.com/networkx/networkx/pull/7300)
+    - This came up over the weekend, would have been nice to have it for debugging.
+    - I think we left off with two options: "just merge it" or add support for enabling via a new env var (`NETWORKX_BACKEND_DEBUG`)
+        - sounds like Mridul is leaning towards merging it and addressing additional features later
+
+ - Status on https://github.com/networkx/networkx/pull/7294 (`to_backend_graph()`, `from_backend_graph()`)
+    - Should we discuss further then move it out of Draft?
+    - Might be nice to add "networkx" as a reserved backend name, which can be used here and eliminate the need for `from_backend_graph()` as well as used elsewhere (eg. `nx.pagerank(G, backend="networkx")` will force dispatcher to call the default implementation)
+
+
+## June 5, 2024
+
+(many regular attendees unavailable, no meeting?)
+
+
+## June 12, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Anthony Mahanna, Ralph Liu, Dan Schult, Mridul Seth
+
+### Topics/Notes
+
+- Update from Anthony on nx-arangodb?
+    - Looking to either open-source the POC as-is right now, or wait until it is more feature-complete (finish P1 tasks) and release as open-source later.
+    - P1 tasks:
+        - extend to DiGraph, etc
+        - extend to all functions in NX and cuGraph
+        - design a way to avoid rewriting each function
+- Moved here from NetworkX meeting topics:
+    - Reword of "experimental" in the Backend docs. (based on question at PyCon)
+        * i.e. we mean "API may change" but this is at odds with no-code change
+    - How to manage warnings for caching as part of config instead of relying on `warning`
+        - Configuration files
+    - Aditi's J4F networkx backend: https://github.com/Schefflera-Arboricola/nx-j4f/
+      * Having a template/cookie-cutter backend repo is very valuable!
+      * nx-loopback might be valuable from a templating perspective too
+  - Caching convos
+    * pattern for opt-in/incremental adoption == no need to cover every single edge case immediately
+ - Status of Matt's NetSci conference?
+    - Relevant here since there was a proposal to add content about dispatching
+- Should we have a reserved backend name "networkx" which converts whatever graph object is given to networkx and runs the networkx version of the function?
+- SP dev summit discussions:
+    - array dispatching discussions and interest in talking about how to generalize dispatching from what we did for NetworkX to make it useful for other projects. Maybe even NumPy.
+- nx-pandas
+
+
+## June 19, 2024
+
+Attendees: Anthony Mahanna, Mridul Seth, Aditi Juneja, Rick Ratzel
+
+### Topics/Notes
+
+- Update from Anthony after conversation with Erik about exposing additional dispatching APIs to backends.
+   - This makes a new pattern (backends that call or "sub-dispatch" to other backends for various reasons) that seems to be emerging among different backends easier to support.
+   - Nice side-effect is that this cleans up dispatching code to add more modularity.
+- Backend docs PR: https://github.com/networkx/networkx/pull/7404
+   - Looks good after most recent round of updates. Let's merge this then refine the wording more in a future PR if necessary.
+- Need to review Erik's PRs!
+- Additional logging PR should be made: latest request is to understand if cache hit or miss happened
+
+
+## June 26, 2024
+
+Attendees: Ralph Liu, Rick Ratzel, Dan Schult, Mridul Seth, Aditi Juneja
+
+### Topics/Notes
+
+- Update from Matt on NetSci talk (if Matt is available)
+- Lots of PRs to review from Erik
+  - Allow backend graphs to be input to nx.Graph(data) - https://github.com/networkx/networkx/pull/7259
+  - Automatically cache results from simple functions - https://github.com/networkx/networkx/pull/7283
+  - Allow backend kwargs to be passed via special keywords *_kwargs= - https://github.com/networkx/networkx/pull/7297
+  - Enable config to be used as context manager - https://github.com/networkx/networkx/pull/7363
+  - Add nx.config.backend option - https://github.com/networkx/networkx/pull/7485
+  - Ensure we always raise for unknown backend in backend= - https://github.com/networkx/networkx/pull/7494
+  - Add "networkx" backend for dispatching - https://github.com/networkx/networkx/pull/7496
+  - Add config option to disable warning when using cached value - https://github.com/networkx/networkx/pull/7497
+  - Enable caching by default - https://github.com/networkx/networkx/pull/7498
+  - Fall back to other backends on NotImplementedError - https://github.com/networkx/networkx/pull/7499
+
+## July 3, 2024
+
+Attendees: Mridul Seth, Matt Schwennesen, Erik Welch, Rick Ratzel, Anthony Mahanna, Aditi Juneja
+
+- [#7404 (Backend and Configs docs)](https://github.com/networkx/networkx/pull/7404) and [#7363 (config as context manager)](https://github.com/networkx/networkx/pull/7363) are in :tada:
+- https://www.raphtory.com/ temporal graphs, interested in being nx backend to extend their API
+  - https://www.pometry.com
+- EuroSciPy talk accepted, congrats @Schefflera-Arboricola :tada:
+  - Erik also trying to go to co-present and to add dispatching to scikit-image
+
+### Dispatching PRs, prioritized:
+- [#7494](https://github.com/networkx/networkx/pull/7494) : Ensure we always raise for unknown backend in `backend=`
+    - Let's get this in!
+    - This fixes a bug (which Dan encountered right after I made this PR!)
+    - Renamed "nx-loopback" to "nx_loopback"
+        - Also done in [#7297](https://github.com/networkx/networkx/pull/7297)
+- [#7499](https://github.com/networkx/networkx/pull/7499) : Fall back to other backends on `NotImplementedError`
+    - Let's get this in!
+    - This improves behavior and exception messages
+    - Rick: what about `MemoryError` and other errors?
+    - Should we warn for any case, not just `logger.debug`?
+    - Rick: can we add more warnings once #7497 is in?
+    - Rick: exception messages should tell users how to fix things...
+- [#7498](https://github.com/networkx/networkx/pull/7498) : Enable caching by default
+    - Let's get this in!
+    - Related: [#7497](https://github.com/networkx/networkx/pull/7497)
+- [#7497](https://github.com/networkx/networkx/pull/7497) : Add config option to disable warning when using cached value
+    - Do we like the generic implementation? Any other warnings to add?
+- [#7297](https://github.com/networkx/networkx/pull/7297) : Allow backend kwargs to be passed via special keywords `<backend>_kwargs=`
+    - Do we still like this feature?
+    - Renamed "nx-loopback" to "nx_loopback"
+        - Also done in [#7494](https://github.com/networkx/networkx/pull/7494)
+- [#7496](https://github.com/networkx/networkx/pull/7496) : Add `"networkx"` backend for dispatching
+    - Discussed and postponed for a while, but I think it's time to add this
+    - Aditi has feedback and other ideas
+    - Changes in PR aren't particularly easy to understand when reviewing
+- [#7505](https://github.com/networkx/networkx/pull/7502) : expand `backend_priority` config to support graph generators
+    - WIP: needs documentation (and tests?)
+    - Rick and Erik discussed this; ought to be considered and discussed by more
+    - This is a slightly breaking change if people use `nx.config.backend_priority`
+        - We could catch this usage via properties and warn for a release
+    - Erik finds this a joy to use!
+    - Need better introspection...
+- [#7485](https://github.com/networkx/networkx/pull/7485) : Add `nx.config.backend` option
+    - Also consider [#7528](https://github.com/networkx/networkx/pull/7528)
+    - And continue exploring and discussing alternatives
+- [#7528](https://github.com/networkx/networkx/pull/7528) : save backend kwargs when using config as context
+    - Also consider [#7485](https://github.com/networkx/networkx/pull/7485)
+    - And continue exploring and discussing alternatives
+    - WIP: needs documentation
+- [#7294](https://github.com/networkx/networkx/pull/7294) : add `to_backend_graph` and `from_backend_graph`
+    - Do we need `from_backend_graph` if "networkx" is a backend [#7496](https://github.com/networkx/networkx/pull/7496)?
+    - WIP: needs attention, design exploration, docs, etc.
+    - Nice feature to have that enables backend-to-backend conversions
+    - Related: [#7259](https://github.com/networkx/networkx/pull/7259)
+- [#7259](https://github.com/networkx/networkx/pull/7259) : Allow backend graphs to be input to `nx.Graph(data)`
+    - Not too complicated or controversial, just lower priority
+    - Could use [#7294](https://github.com/networkx/networkx/pull/7294) if available
+
+### Topics (and future topics) brought up in the meeting:
+- plans for NX docs
+  - projects like NumPy and Pandas have a nice format we should consider adopting
+  - various backends and the "backend ecosystem" should be more discoverable
+- backends for visualization
+  - https://www.raphtory.com
+    - lots of conversation about temporal graphs
+- what are our plans for introspection?
+
+
+## July 10, 2024
+
+(Dan & Rick at SciPy, assuming meeting occurred but no notes?)
+
+
+## July 17, 2024
+
+(meeting occurred but no notes)
+
+
+## July 24, 2024
+
+Attendees: Matt Schwennesen, Rick Ratzel, Erik Welch, Anthony Mahanna, Mridul Seth, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+
+- Erik's PRs are (mostly) still open.  See July 3 meeting notes for the prioritized list.
+  - We went over individual PRs, mostly spent time on config-related PRs.
+  - Action item was for team to finishe reviewing and get more of them merged.
+
+- "backend only" algorithms
+  - Driven by having nx-cugraph add leiden, which currently is not a NX algo.
+  - Discussed details such as:
+    - how are backend-only algos implemented?
+      - Ans. They should simply raise NotImplementedError
+    - do backend-only algos have docstrings?
+      - Ans. Yes, and the docstring should mention it it's not implemented somehow
+    - do backend-only algos have tests?
+      - Ans. Yes, and the test should verify the signature is correct (by calling the algo and catching the appropriate exception) then make sure it raises NotImplementedError
+    - how do backend authors contribute/request new backend-only algos to be added to NetworkX?
+      - Ans. contributors submit a PR to add the new function, make sure it has a docstring, test, raises NotImplementedError, etc. and the regular PR approval process determines if it's added.
+      - Matt also suggested we document this process
+
+
+## July 31, 2024
+
+Attendees: Matt Schwennesen, Mridul Seth, Erik Welch, Anthony Mahanna, Rick Ratzel, Aditi Juneja
+
+### Topics/Notes
+
+- Status on open PRs for 3.4 (mostly Erik's?)
+    - We got through several PRs.  Mridul is actively reviewing them now.
+      - https://github.com/networkx/networkx/pull/7499 ("Fall back to other backends on NotImplementedError")
+        - not much discussion, no disagreement
+      - https://github.com/networkx/networkx/pull/7497 ("Add config option to disable warning when using cached value")
+        - not much discussion, no disagreement
+      - https://github.com/networkx/networkx/pull/7297 ("Allow backend kwargs to be passed via special keywords <backend>_kwargs=")
+        - some discussion for clarification, but all seemed to agree this would be useful
+      - https://github.com/networkx/networkx/pull/7496 ("Add "networkx" backend for dispatching")
+        - Mridul was interested in having `backend="networkx"` avoid most of the dispatching machinery (the fast path).
+      - https://github.com/networkx/networkx/pull/7502 ("WIP: expand backend_priority config to support graph generators")
+        - Discussion was around a few topics:
+          - the words "algos" and "generators" and if there's better choices
+          - if we need the algos/generators categories at all, or if they should be added later.  Some thought it would be good to have now because they might be useful and because dispatching to a generator backend that returns a specific graph type could break workflows and should be highly configurable.
+      - https://github.com/networkx/networkx/pull/7485 ("Add nx.config.backend option")
+        - Related: https://github.com/networkx/networkx/pull/7528 ("WIP: save backend kwargs when using config as context")
+        - Discussion seemed to be winding down, this will possibly be discussed more next time
+
+- RFC on PR https://github.com/networkx/networkx/pull/7578 to lift restriction on auto-dispatching to certain backend functions that return graph objects.
+    - Should it be opt-in, using https://github.com/networkx/networkx/pull/7502 ("expand backend_priority config to support graph generators")?
+    - This was discussed and demo'd
+    - One of Erik's concerns was that the backends are deciding the behavior (in this case, if generators should be dispatched to automatically - backends decide this by communicating to the dispatcher that they return a "compatible" graph type and the dispatcher allows it).  Erik proposed this be opt-in via config, possibly via [PR 7502](https://github.com/networkx/networkx/pull/7502)
+      - Rick thought opting-in would be okay.  Rick also proposed this be opt-out to give the user the same amount of control with the assumption they usually want the behavior of dispatching to functions returning compatible graphs.
+
+
+## August 7, 2024
+
+Attendees: Matt Schwennesen, Anthony Mahanna, Erik Welch, Aditi Juneja, Mridul Seth, Rick Ratzel
+
+### Topics/Notes
+
+- ArangoDB topics:
+    - nx-arangodb backend - any volunteers for testing?
+        - Anthony provides instructions, package, etc.
+        - Targeted release is beginning of September
+    - ArangoDB working on CRUD interface for MultiGraph
+    - go-to-market for nx-arangodb is soon.  Q: where does the community interact?  A from Mridul: not aware of anything specific but there is a Twitter account.  Also GH discussions, and Discord.
+- Thoughts about what we can do in time for 3.4 to improve docs, specifically for the wide variety of topics related to using NetworkX with backends
+- networkx_dependents for August 2024 - [PR#7314](https://github.com/networkx/networkx/pull/7314)
+- Status on open PRs for 3.4 (mostly Erik's?)
+
+
+## August 14, 2024
+
+Attendees: Matt Schwennesen, Anthony Mahanna, Erik Welch, Aditi Juneja, Rick Ratzel
+
+### Topics/Notes
+
+- Discuss Erik's PR: ["Allow dispatch machinery to fall back to networkx"](https://github.com/networkx/networkx/pull/7585)
+
+- Continued from last meeting: thoughts about what we can do in time for 3.4 to improve docs, specifically for the wide variety of topics related to using NetworkX with backends
+    - Mention backends on the [Install page](https://networkx.org/documentation/stable/install.html)?
+    - Mention backends on the [Tutorial page](https://networkx.org/documentation/stable/tutorial.html)?
+    - Add a section on backend development to the [Developer page](https://networkx.org/documentation/stable/developer/index.html)?
+    - Add a page dedicated accessible from top navbar on "known good" backends?
+
+- Anthony's question about NX testing w/ backends
+
+
+## August 21, 2024
+
+Attendees: Anthony Mahanna, Rick Ratzel, Matt Schwennesen, Mridul Seth, Erik Welch, Aditi Juneja
+
+### Topics/Notes
+
+- Continued from last meeting: thoughts about what we can do in time for 3.4 to improve docs, specifically for the wide variety of topics related to using NetworkX with backends
+    - Created PR https://github.com/networkx/networkx/pull/7611
+    - Thoughts about the NetworkX Backend Gallery?
+        - Decision is to add a new top navbar item for "backends" instead of just adding backends to the existing gallery
+
+- Discuss Erik's PR: ["Allow dispatch machinery to fall back to networkx"](https://github.com/networkx/networkx/pull/7585)
+    - Question about new option specifically for fallback priority (answered in the PR)
+    - Discussed how should_run is used, which is slightly different (it will get run even if not opt'd-in as a last resort before failing)
+
+- Anthony asked if anyone would like to try the latest nx-arangodb
+    - Rick and Mridul are interested
+    - Still partially closed source, but okay to have others start using
+    - Anthony is going to check if he needs everything OSS before adding nx-arangodb to the new NX backends docs page
+
+
+## August 28, 2024
+
+Attendees: Rick Ratzel, Matt Schwennesen, Anthony Mahanna
+
+### Topics/Notes
+
+- Chatted about plotting
+    - Matt mentioned that probably everything that's going to get done for the summer is already done.  Waiting on 2 PRs.
+        - https://github.com/networkx/networkx/pull/7571
+        - https://github.com/networkx/networkx/pull/7589
+
+- Some discussion on https://github.com/networkx/networkx/pull/7585
+    - Matt still has not had a chance to review it
+    - Matt and others also mentioned it might be a good time to think about dispatching goals
+    - Rick and others mentioned we need not block 7585 from being merged but that the discussion happening in the PR and in general is good
+
+
+## September 4, 2024
+
+Attendees: Rick Ratzel, Anthony Mahanna, Erik Welch, Aditi Juneja
+
+### Topics/Notes
+
+- Q. from Anthony: What should the new nx-arangodb repo have to make the overall UX similar to NX's repo (docs, issue template, sense of community, etc.)
+    - A. suggested that question be asked in the general community call
+- Q. from Anthony: Will there be any announcements for backends being released by the NX project (eg. )
+    - A. Mridul does the socials, he may be interested, maybe another question for the general call
+- Q. from Anthony: how do people feel about progress bars for long-running operations?
+    - A. Could be nice, but backends should be aware that applications using NX may not want their users to see them.
+- Q. from Anthony: caching - are graphs cached on the object itself, or elsewhere?
+    - A. https://github.com/networkx/networkx/pull/7585 has some updates to add cache utilities, these could be used for this case
+- Q. from Anthony: should testing be done across a specific matrix of OS, python versions, etc.?
+    - A. Maybe?  NX may start requesting backend devs do this but right now there isn't a requirement.
+
+- Update from EuroSciPy:
+    - Aditi's talk went well (NX dispatching and nx-parallel)
+    - Session on dispatching (Sebastian, Erik, others)
+        - Feedback about backends introducing bugs that may be perceived as NX bugs - we should be mindful of this
+    - Should we add a config to enable/disable fallback to NX?
+    - Feeback about the proliferation of config options, many were against configuration in a library in general?
+        - concern was global state being problematic with multi-threaded, other things.
+            - Q. from Aditi: how is this different than logging?
+            - A. logging has this problem too but the impact is much less (log messages vs. potential for getting different results, breakages, etc.)
+
+
+## September 11, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Anthony Mahanna, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+
+- Erik's demo for https://github.com/networkx/networkx/pull/7585
+- RustworkX backend(POC) - https://github.com/thomasjpfan/rustworkx-backend
+    - Currently an exploration as part of understanding dispatching for scikit-image
+- Update on Scikit Image from EuroScipy:
+    - Still want to use spatch
+    - Good discussion (~2 hours) on dispatching, what was learned from NX, array API, dataframe API, etc.
+
+
+## September 18, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Mridul Seth, Dan Schult, Aditi Juneja, Anthony Mahanna
+
+### Topics/Notes
+
+- Questions for Erik about https://github.com/networkx/networkx/pull/7585 ?
+    - Still waiting on additional tests? - yes, Erik is adding tests as requested by Mridul, and Dan & Rick also like the idea.
+    - We can close the PRs that consist of changes included in 7585.
+
+- Doc updates for backends for 3.4 in progress in https://github.com/networkx/networkx/pull/7611
+    - This should also be ready for review in time to be merged for 3.4
+
+
+## September 25, 2024
+
+Attendees: Rick Ratzel, Anthony Mahanna, Aditi Juneja, Mridul Seth, Dan Schult
+
+### Topics/Notes
+
+- Discussion about [PR 7585](https://github.com/networkx/networkx/pull/7585) (Allow dispatch machinery to fallback to NX)
+    - If we need more time for this for 3.4, is there an alternative that can be included in 3.4 to achieve "basic fallback"?
+    - We also have [PR 7578](https://github.com/networkx/networkx/pull/7578) as an option?
+- Discussion about backend presence in the 3.4 docs
+    - Rick will apply suggestion made at meeting to his [existing PR](https://github.com/networkx/networkx/pull/7611)
+    - Suggestions included:
+        - Keeping backend user docs under "Reference" (or at least a link to them in Reference)
+        - Do not include specific backends in Gallery since Gallery should remain generic
+        - Perhaps "Install" should have the list of actual backends available (or at least a link to them)
+- Anthony to discuss future plans for nx-arangodb
+    - Anthony mentioned upcoming "phase 2" of nx-arangodb, where users would have the option of running algos server-side without code changes.
+- Anthony to discuss upcoming ArangoDB webinar
+    - Anthony also invited members to try the ArangoDB managed service
+
+
+## October 2, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Mridul Seth, Aditi Juneja
+
+### Topics/Notes
+
+- ArangoDB webinar went well
+    - ~100 attendees
+    - Covered ArangoDB / RAPIDS cuGraph / NetworkX integration
+    - Anthony's demo was very good.  NetworkX as a database API is cool.
+
+- NX 3.4rc happening soon, before Python 3.13 on Oct. 7
+    - Once NX 3.4rc passes tests with Python 3.13, 3.4 final can be released
+    - NX 3.4 final is typically a week after last rc, and since the community will want ~1 week to test with py3.13, final will be around 10/14
+
+- nx-cugraph is adding `NX_CUGRAPH_AUTOCONFIG` which applies various settings to underlying `NETWORKX_*` config vars.
+    - This is to support the "fully accelerated" zero code change use case, so it adds the "cugraph" backend to `NETWORKX_BACKEND_PRIORITY` and `NETWORKX_BACKEND_PRIORITY_GENERATORS`, and sets `NETWORKX_FALLBACK_TO_NX=True`
+
+
+## October 9, 2024
+
+Attendees: Rick Ratzel, Aditi Juneja, Mridul Seth, Derek Alexander
+
+### Topics/Notes
+
+- Doc updates for upcoming NX 3.4 final release.
+    - Questions from [PR 7611](https://github.com/networkx/networkx/pull/7611)
+        - Should we have a dedicated Backends page accessible via the top navbar, or just include it in an existing section?
+            - [Mridul] Likes the idea of a dedicated Backends page for discoverability, even if the current list is short.
+        - Should we include backends not listed in the PR?  If so, which ones?
+            - [graphblas-algorithms](https://github.com/python-graphblas/graphblas-algorithms) could be added, but its docs are out-of-date, might need testing against NX 3.4
+                - [Mridul] Concern about compatibility with NumPy version it uses wrt NX 3.4
+            - others?
+    - Should change the language where "these backends are known to work with the latest stable version of NX"
+        - Maybe we should remove that language since it's unknown if they'll work with future versions?
+        - or leave it in place as-is and let people open issues if there's a problem
+    - Aditi to add a comment to the PR to instruct contributors how to add their backend
+
+- Benchmarking / Derek's RFC
+    - use cases:
+        - catching regressions - ASV is very good for this
+        - on-demand benchmark runs
+        - comparing backends - ASV is *not* good at this (as far as we know), pytest-benchmark can do this well
+        - comparing different hardware/environments
+            - be mindful of hardware that users can actually use (for example, don't just run on H100, also include what's on Colab, 4090's, etc.)
+
+## October 16
+Attendees: Erik Welch, Anthony Mahanna, Aditi Juneja
+
+### Topics / Notes
+- nx-arangodb updating to NetworkX 3.4
+    - Erik: `_should_backend_run` no longer calls `can_run`, so nx-arangodb special dispatching should call `_can_backend_run` before calling `_should_backend_run`
+    - Should other backends be supported such as nx-parallel?
+        - How to best/generically make it easier for other backends to convert to/from arangodb
+    - Release that support nx 3.4 coming tomorrow hopefully
+    - How to best handle dynamic updates of graph and cached graphs?
+
+
+## October 23, 2024
+
+Attendees: Rick Ratzel, Anthony Mahanna, Erik Welch, Mridul Seth
+
+### Topics/Notes
+
+- [Erik] [PR 7690](https://github.com/networkx/networkx/pull/7690) for backend-only functions
+    - Mridul - PR LGTM, might be good to have an actual stub API to go with it, but on second thought, maybe that's better as a separate PR?
+- Discussion about nx-arangodb and zero-code-change
+    - Considering adding backend support for nx.empty_graph() as a factory function to enable zero-code-change support for nx-arangodb
+    - The pattern would be to promote using "G=nx.empty_graph()" instead of "G=nx.Graph()" to give backends an opportunity to use their Graphs without requiring a code change or having a graph conversion take place.
+- NX 3.5?
+    - Plan is to drop python 3.10 support
+        - [tomllib](https://docs.python.org/3/library/tomllib.html) will be an option once py 3.10 is dropped, which will allow NX to include config parsing features, etc.
+- Telemetry - ArangoDB (and probably others) interested in usage stats (who is using, who is using what, etc.) - is there anything in place?
+        - Mridul mentioned the page stats for the docs, but that's it.
+- ArangoDB will submit a PR to update docs to use different URL for its backend in the "Backend" page, to use a page that has its video, etc.
+    - Also mentioned graphblas could be updated so it can be included on the "Backends" page as well.  Erik and Jim K. to look into that, possibly for NX 3.5
+
+
+## October 30, 2024
+
+Attendees: Rick Ratzel, Aditi Juneja, Mridul Seth
+
+### Topics/Notes
+
+- Continue discussion on [PR 7690](https://github.com/networkx/networkx/pull/7690) for backend-only functions
+
+
+## November 6, 2024
+
+Attendees: Erik Welch, Aditi Juneja, Mridul Seth, Derek Alexander
+
+### Topics/Notes
+
+- Continue discussion on [PR 7690](https://github.com/networkx/networkx/pull/7690) for backend-only functions
+- Dispatching consistency between networkx, scikit-image, spatch
+- Backend benchmarking, dashboard
+
+
+## November 13, 2024
+
+Attendees: Rick Ratzel, Mridul Seth, Erik Welch, Aditi Juneja, Dan Schult
+
+### Topics/Notes
+
+- Notes from PyData NYC:
+    - Overview of GPU accelerated NetworkX talk
+    - Discussion about graph databases
+        - discussed local storage backend, zero-code change w/ ArangoDB backend
+        - empty_graph() discussion - would be nice if that was used more than nx.Graph(), since dispatcher can then dispatch to user-preferred backend graph types w/out code changes
+- Continue discussion on [PR 7690](https://github.com/networkx/networkx/pull/7690) for backend-only functions
+- [Erik] Proposal to add a NetworkX dispatchable function for converting to/from backends
+    - ex. `Gfoo = nx.to_backend_graph(Gbar, backend="foo")`
+    - Question about why we wouldn't just import the backend package and instantiate directly.
+        - Ans: by having a dispatchable function, users can create backends w/out knowing the backend package name.
+
+
+## November 20, 2024
+
+Attendees: Mridul Seth, Erik Welch, Aditi Juneja
+
+### Topics/Notes
+
+- Should we make this meeting a more generic "dispatching" meeting?
+- Caching of functions?
+- Deploying of nx-bench?
+
+
+## November 27, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Ralph Liu
+
+### Topics/Notes
+
+- nx-bench: is there overlap between this effort and similar infra that individual teams (like NVIDIA) have for benchmarking? (guess: probably)
+    - Erik mentioned Derek does want contributions, and also would like GPU-based results included if possible
+    - Would be great if individual projects don't re-invent the wheel when it comes to benchmark automation and reporting
+    - Would also make "standard" benchmark metrics possible, and this could be used for comparing NetworkX/backends to each other with confidence
+        - Ex. backend developer installs nx-bench, configures it to compare backends X, Y, and Z in the local environment, runs, gets report.  nx-bench takes care of downloading standard datasets too or running graph generators as needed.
+
+
+- [PR 7743](https://github.com/networkx/networkx/pull/7743): PR for Leiden as a backend-only algo
+    - [PR 7690](https://github.com/networkx/networkx/pull/7690) (backend-only utils) might also be helpful to merge at this time. That PR raises some general comments/questions about backend-only APIs that might be worth discussing further?
+        - zero-code change/fallback to NX isn't supported for backend-only APIs. I (Rick) think this is okay but curious what others think
+        - "it is misleading because it gives the impression that networkx has leiden implemented but it does not" - agree that this isn't ideal.
+        - Mridul mentioned that there's still benefits to keeping a backend-only API in the NX namespace even if NotImplemented: standard API for users to code against which also enables standard docs and examples, standard tests, standard benchmarks, etc.
+
+
+## December 4, 2024
+
+Attendees: Erik Welch, Rick Ratzel, Ralph Liu
+
+### Topics/Notes
+
+- Leiden
+    - [PR 7743](https://github.com/networkx/networkx/pull/7743): Leiden funcs
+    - [PR 7690](https://github.com/networkx/networkx/pull/7690): backend-only functions
+
+- Erik, Rick, and Ralph were the only attendees, so the Leiden and backend-only discussion will need to be continued when more NX devs are present.
+
+
+## December 11, 2024
+
+Attendees: Rick Ratzel, Erik Welch, Anthony Mahanna, Derek Alexander, Ralph Liu
+
+### Topics/Notes
+
+- ArangoDB backend updates
+    - considering DB creds be moved out of config to emphasize multiple connections
+    - config could be the default connection?
+
+- Leiden
+    - Derek shared this link related to Leiden: https://github.com/graspologic-org/graspologic-native
+    - Derek mentioned Leiden is used for topic search with GraphRAG applications
+        - Erik asked if there's any other important algos NetworkX should add. Ans.: don't know.
+    - Discuss any concerns that may be blocking these PRs from being reviewed and merged
+        - [PR 7743](https://github.com/networkx/networkx/pull/7743): Leiden funcs
+        - [PR 7690](https://github.com/networkx/networkx/pull/7690): backend-only functions
+    - There's a grant for adding Leiden to NetworkX (or was it just better community detection support in general?) - interested in details about the intended application (biomed industry?)
+
+- Add runtime hooks to dispatch system: [PR 7765](https://github.com/networkx/networkx/pull/7765)
+- `to_backend_graph` may be useful for benchmarks: [PR 7294](https://github.com/networkx/networkx/pull/7294)
+    - consistency would be nice; too much variation and uncertainty
+    - benchmarking conversion also nice to have

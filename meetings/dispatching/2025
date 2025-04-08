@@ -1,0 +1,161 @@
+# NetworkX Dispatch Meeting notes
+Meeting link:   https://anaconda.zoom.us/j/94192874965?pwd=K0wvcmhXem41ZlVSQ2l4TXlUaDgxdz09
+hackmd link:   https://hackmd.io/rqs_pWMxSLmICXCpI3w-Ug
+Archived notes: https://github.com/networkx/archive/tree/main/meetings/dispatching
+
+
+## January 08, 2025
+
+Attendees: Rick Ratzel, Erik Welch, Anthony Mahanna
+
+### Topics/Notes
+
+- Leiden PRs ready to merge:
+    - [PR 7743](https://github.com/networkx/networkx/pull/7743): Leiden funcs
+    - [PR 7690](https://github.com/networkx/networkx/pull/7690): backend-only functions
+
+- Allowing Graph constructors to be dispatchable
+    - "can an ArangoDB graph (nx-adb Graph) be created internally when a user creates a nx.Graph()?"
+
+
+## January 22, 2025
+
+Attendees: Ralph Liu, Rick Ratzel, Aditi Juneja, Erik Welch
+
+### Topics/Notes
+
+- Future meeting: demo plugin hooks using profiler plugin (Erik)
+
+- PRs
+    - [PR 7768](https://github.com/networkx/networkx/pull/7768): Avoid repeated cache conversion failures
+    - [PR 7765](https://github.com/networkx/networkx/pull/7765): WIP: add runtime hooks to dispatch system
+        - Erik likes current structure; needs documentation
+    - [PR 7760](https://github.com/networkx/networkx/pull/7760): Dispatch classes such as nx.Graph(backend=...)
+        - Will show nx-cugraph and nx-arangodb using this (soon)
+    - [PR 7602](https://github.com/networkx/networkx/pull/7602): Add _dispatchable._get_convert_kwargs method for more composability
+    - (others?)
+
+- Leiden PR - any open concerns?
+    - [PR 7743](https://github.com/networkx/networkx/pull/7743): Leiden funcs
+
+- Discussion on plugin hooks:
+    - Should this topic be elevated to the general discussion?  For example, https://github.com/rapidsai/nx-cugraph/pull/57 could apply generally to NetworkX, so should it be part of NetworkX proper?
+
+- Thoughts on refactoring the dispatching codebase? [issue 7787](https://github.com/networkx/networkx/issues/7787) and [7776](https://github.com/networkx/networkx/pull/7776)
+    - Any overlap with what we want to see with the dispatching code and [spatch](https://github.com/scientific-python/spatch)?
+
+
+## February 05, 2025
+
+Attendees: Dan Schult, Mridul Seth, Rick Ratzel, Erik Welch, Ralph Liu
+
+### Topics/Notes
+
+- Mridul: We need user feedback on dispatching
+    - Dan: How do we do that? Survey?
+    - Mridul: Can NVIDIA help?
+    - Erik: Add a link for feedback in the docs
+    - Talk to existing cuGraph users
+    - Erik has found examples on github (possibly students) where code includes setting the cugraph backend
+    - Caltech group that Ross is part of is using community detection - can we get Ross to try dispatching?
+        - Ross seems to use more explicit dispatch, he'd be a good candidate for feedback
+    - Hypernetx users/devs would be good candidates
+        - They've tried this and were successful getting it running, BC perf needed improvement
+
+- Erik: what are the guidelines around using the `_adj` member?
+    - Could be dangerous since it's read/write capable
+    - Dan/Mridul: okay to use, just be careful
+    - non `_` members are read-only views, more expensive
+
+
+## February 19, 2025
+
+Attendees: Rick Ratzel, Erik Welch, Ralph Liu
+
+### Topics/Notes
+
+- (no topics)
+
+
+## February 25, 2025
+
+Attendees: Rick Ratzel, Erik Welch, Ralph Liu, Anthony Mahanna
+
+### Topics/Notes
+
+- First meeting at the new time: Tuesdays at 10:30 Central
+
+- Potential topics (for now or next time):
+    - PRs to review
+    - Tech debt and how to best work on reducing it
+    - Upcoming conferences
+
+- Conferences:
+    - Pyconf Hyderabad 2025: https://github.com/Schefflera-Arboricola/pyconf_hyderabad_2025
+    - PyData London
+        - Erik, Aaron, Mridul planning on a talk
+    - SciPy
+        - NVIDIA will be submitting talks (Erik, Ralph, Rick)
+            - Erik: dispatching, how to work on backends
+            - Ralph, Rick: nx-cugraph use cases
+    - Data Science Salon, NYC
+        - https://www.datascience.salon/newyork/
+
+- ArangoDB working on updating nx-arangodb to take advantage of new dispatchable Graph functions
+    - add/remove nodes, etc.
+    - current implementation that uses dictionary factories results in on API call per update
+
+- installing backend(nx-parallel) after importing networkx --> does not update config (figured while creating demo for Pyconf Hyderabad)
+    - reloading configs
+    - functions like: `remove_backend`(removing it from the configs and ep) - helpful if setting configs for a backend might slow down the importing of networkx and the user doesn't even use that backend in their code, `update_backends`(or `reload_config`)
+- can we simplify installing backends for users inside(or via) networkx? --> like storing(and then later running) the install instructions in the `networkx.backend_info` ep? but the backend should be already installed to load the ep!
+    - something like `nx.install_backend("backend_name")`
+
+- Any new or interesting use cases for backends/dispatching?
+    - integrations with LangChain
+    - kuzudb integration
+
+- CookieCutter backend (similar to Aditi's J4F) is something NX core devs have been asking for
+    - Aditi suggested this could this be a good GSOC project(+ dispatching tutorial nb or gallery eg - for users), and that she, Dan, others could mentor.
+    - [ToDo] Aditi mentioned she'd add this to the list of GSOC projects.
+
+- Any updates needed to NX 3.5?
+    - https://github.com/networkx/networkx/pull/7768
+    - Can we coordinate with Google Colab to have them update to 3.5 soon after it's released?
+    - https://github.com/networkx/networkx/pull/7760
+
+- Notes on using nx-arangodb
+    ```
+    docker run --name arango -p 8529:8529 -e ARANGO_ROOT_PASSWORD=test arangodb/arangodb:3.12.4
+    http://localhost:8529
+    Username: root
+    password: test
+    Alternative: https://github.com/arangodb/adb-cloud-connector#readme
+    Notebook Example: https://colab.research.google.com/github/arangodb/nx-arangodb/blob/main/doc/nx_arangodb.ipynb
+    ```
+
+## March 10, 2025
+
+Attendees: Rick Ratzel, Ralph Liu
+
+### Topics/Notes
+
+- No topics, only Rick & Ralph showed up
+
+
+## April 1, 2025
+
+Attendees: Erik Welch, Rick Ratzel, Dan Schult
+
+### Topics/Notes
+
+- This is the first meeting using the new monthly meeting schedule.
+- Dan kicked out "Warren's AI Notetaker" from the meeting and we had some discussion about it.
+- Documentation update Q&A: https://github.com/networkx/networkx/pull/7884
+- Any needs for the 3.5 release?
+  - Avoid repeated cache conversion failures [#7768](https://github.com/networkx/networkx/pull/7768)
+  - Dispatch classes such as `nx.Graph(backend=...)` [#7760](https://github.com/networkx/networkx/pull/7760)?
+    - See: https://github.com/rapidsai/nx-cugraph/pull/92
+    - maybe not for 3.5
+  - Add `_dispatchable._get_convert_kwargs` method for more composability [#7602](https://github.com/networkx/networkx/pull/7602)?
+- https://en.wikipedia.org/wiki/Worse_is_better
